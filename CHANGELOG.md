@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-20
+
 ### Added
 
 - GitHub Action (`uses: namaysingh3925/launch-doctor@v0`): runs the checkup on pull requests, posts inline comments with fix prompts on the lines the pull request adds, and keeps one summary comment up to date. Inputs: `path`, `fail-on` (`critical`, `warning` or `never`), `comment`, `args`, `github-token`.
@@ -16,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Five more providers. Clerk: secret keys are told apart from Stripe's (same `sk_live_` prefix), and apps get a "switch to a production instance" checklist item. Paddle and Lemon Squeezy: webhooks that never verify the signature are critical, webhooks that sign re-encoded JSON or that are missing are warnings, and their API keys are found in code. Convex: deploy keys in code, and public mutations and actions that never check who is calling (in apps with accounts). Appwrite: API keys passed to `setKey()`, and permissions that let anyone (critical) or every signed-in user (warning) change data, in code and in `appwrite.json`.
 - Mobile apps (Expo and React Native). Keys in app code are critical, since they ship inside the app, and `EXPO_PUBLIC_` variables are treated like `NEXT_PUBLIC_` ones. Monitoring looks for crash reporting (Sentry, Crashlytics, Instabug and others). Legal asks every store app for a privacy policy link. First impressions finds placeholder app IDs (`com.anonymous...`), cleartext HTTP on Android, `NSAllowsArbitraryLoads` on iOS and development addresses like `10.0.2.2`, and adds the store-readiness checklist (listing, privacy forms, a reviewer account, a release build on a real phone). Website-only checks no longer run on a mobile app, and a monorepo with both gets both.
+
+### Changed
+
+- The workflow written by `launch-doctor init` uses `actions/checkout@v7` and `actions/setup-node@v7`.
 
 ### Fixed
 
@@ -78,6 +84,7 @@ First release.
 - `.launchdoctorignore` for silencing findings by id or skipping paths.
 - Support for JavaScript / TypeScript and Python projects.
 
-[Unreleased]: https://github.com/namaysingh3925/launch-doctor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/namaysingh3925/launch-doctor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/namaysingh3925/launch-doctor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/namaysingh3925/launch-doctor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/namaysingh3925/launch-doctor/releases/tag/v0.1.0
