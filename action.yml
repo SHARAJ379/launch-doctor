@@ -19,7 +19,7 @@ inputs:
     description: Extra Launch Doctor options, for example "--offline --skip legal".
     default: ''
   github-token:
-    description: Token for the pull request comments. Needs "pull-requests: write".
+    description: 'Token for the pull request comments. Needs "pull-requests: write".'
     default: ${{ github.token }}
 
 outputs:
