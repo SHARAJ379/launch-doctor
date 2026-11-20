@@ -10,6 +10,7 @@ import { DEFAULT_HISTORY_DEPTH } from './history.js';
 import { CATEGORY_IDS, runDoctor } from './index.js';
 import { runInit } from './init.js';
 import { runLiveScan } from './live.js';
+import { runMcpServer } from './mcp.js';
 import { bold, dim, renderReport } from './report.js';
 import { renderSarif } from './sarif.js';
 import { renderStepSummary } from './summary.js';
@@ -23,6 +24,7 @@ const HELP = `
     npx launch-doctor [folder] [options]
     npx launch-doctor init [folder]     Create .launchdoctorignore and a GitHub Actions workflow
     npx launch-doctor scan <url>        Check your deployed site (exposed files, source maps, open Supabase tables, headers)
+    npx launch-doctor mcp               Start an MCP server so Claude Code, Cursor and other AI tools can run checks
 
   ${bold('Options')}
     --domain <domain>     Domain you send email from (checks SPF / DKIM / DMARC)
@@ -196,6 +198,32 @@ function init(argv: string[]): void {
   for (const f of skipped) process.stdout.write(`  skipped  ${f} ${dim('(already exists)')}\n`);
 }
 
+const MCP_HELP = `
+  ${bold('launch-doctor mcp')} - an MCP server for Claude Code, Cursor and other AI coding tools
+
+  ${bold('Usage')}
+    npx launch-doctor mcp      Your AI tool starts this itself and talks to it over stdin and stdout
+
+  ${bold('Tools it offers')}
+    scan_project   Check a project folder: grade, findings with fix prompts, and the checklist
+    scan_url       Check a deployed site from the outside
+    list_checks    List the categories and finding ids
+
+  ${bold('Set it up')}
+    Claude Code    claude mcp add launch-doctor -- npx -y launch-doctor mcp
+    Cursor         add to .cursor/mcp.json:
+                   { "mcpServers": { "launch-doctor": { "command": "npx", "args": ["-y", "launch-doctor", "mcp"] } } }
+`;
+
+async function mcp(argv: string[]): Promise<void> {
+  if (argv.some((a) => a === '-h' || a === '--help')) {
+    process.stdout.write(MCP_HELP);
+    return;
+  }
+  if (argv.length) fail(`mcp doesn't take options (got ${argv.join(' ')}). Run "launch-doctor mcp --help" for setup.`);
+  await runMcpServer();
+}
+
 const SCAN_HELP = `
   ${bold('launch-doctor scan')} - check your deployed site from the outside
 
@@ -330,6 +358,7 @@ async function commentOnPr(report: Report, root: string): Promise<void> {
 async function main(): Promise<void> {
   if (process.argv[2] === 'init') return init(process.argv.slice(3));
   if (process.argv[2] === 'scan') return scan(process.argv.slice(3));
+  if (process.argv[2] === 'mcp') return mcp(process.argv.slice(3));
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     process.stdout.write(HELP);

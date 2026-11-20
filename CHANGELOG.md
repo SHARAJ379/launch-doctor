@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Action (`uses: namaysingh3925/launch-doctor@v0`): runs the checkup on pull requests, posts inline comments with fix prompts on the lines the pull request adds, and keeps one summary comment up to date. Inputs: `path`, `fail-on` (`critical`, `warning` or `never`), `comment`, `args`, `github-token`.
 - `--pr-comment` posts the same pull request comments from the CLI. It never fails the run: outside a pull request, or without write access, it explains why it skipped.
 - When `GITHUB_OUTPUT` is set, the grade, score, critical and warning counts are saved as step outputs.
+- `launch-doctor mcp` runs a Model Context Protocol server, so Claude Code, Cursor and other AI tools can run the checkup themselves. Tools: `scan_project` (grade, findings with file, line and fix prompt, and the checklist), `scan_url` (the live site scan) and `list_checks`. Stdio only, no dependencies, protocol versions 2024-11-05 to 2025-11-25.
 
 ### Fixed
 

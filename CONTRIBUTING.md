@@ -45,6 +45,7 @@ src/
   sarif.ts        --sarif output
   summary.ts      GitHub Actions job summary
   github.ts       --pr-comment: pull request summary comment and inline review comments
+  mcp.ts          `launch-doctor mcp`: the MCP server (JSON-RPC over stdio) and its tools
   live.ts         `launch-doctor scan <url>`
   init.ts         files created by `launch-doctor init`
   demo.ts         the sample project used by --demo

@@ -198,6 +198,7 @@ The report uses the same grades and `--json`, `--ci`, `--fail-on`, `--out` and `
 npx launch-doctor [folder] [options]
 npx launch-doctor init [folder]
 npx launch-doctor scan <url> [options]
+npx launch-doctor mcp
 ```
 
 | Flag | Default | Description |
@@ -223,6 +224,7 @@ npx launch-doctor scan <url> [options]
 | `-v`, `--version` | | Show the version |
 | `init [folder]` | `.` | Create `.launchdoctorignore` and `.github/workflows/launch-doctor.yml` (never overwrites) |
 | `scan <url>` | | Check your deployed site from the outside (see [Live site scan](#live-site-scan)) |
+| `mcp` | | Start an MCP server so AI coding tools can run checks themselves (see [MCP server](#mcp-server)) |
 | `--no-db` | off | With `scan`, don't test Supabase tables with the public key found in the page |
 
 Category ids for `--only` and `--skip`: `secrets`, `database`, `payments`, `costs`, `email`, `monitoring`, `legal`, `first-impressions`. Skipped categories show as "skipped" and don't count toward the grade.
@@ -359,6 +361,36 @@ Fix the issues in LAUNCH_FIXES.md one at a time, starting with the critical ones
 4. Review and accept the code edit.
 5. Re-run `npx launch-doctor` to observe your score improve.
 
+### MCP server
+
+`launch-doctor mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server, so your AI assistant can run the checkup itself, read the findings and fix them without you copying anything.
+
+**Claude Code:**
+
+```bash
+claude mcp add launch-doctor -- npx -y launch-doctor mcp
+```
+
+**Cursor** (`.cursor/mcp.json`) and other tools that use the same format:
+
+```json
+{
+  "mcpServers": {
+    "launch-doctor": { "command": "npx", "args": ["-y", "launch-doctor", "mcp"] }
+  }
+}
+```
+
+Then ask: *"Run Launch Doctor on this project and fix the critical findings one at a time."*
+
+| Tool | What it does |
+|---|---|
+| `scan_project` | Checks a folder (default: the one the assistant works in). Returns the grade, every finding with its file, line, explanation and fix prompt, and the checklist of things to verify by hand. Options: `path`, `only`, `skip`, `offline`, `domain`, `history`, `includeBaseline`. |
+| `scan_url` | Checks a deployed site from the outside, like `launch-doctor scan <url>`. Options: `url`, `skipDatabase`. |
+| `list_checks` | Lists the categories and every finding id, for `only`, `skip` and `.launchdoctorignore`. |
+
+The tools only read: nothing is written to your project, and results also come back as structured data for clients that use it. The server speaks MCP over stdio (protocol versions 2024-11-05 to 2025-11-25) and has no dependencies.
+
 ## Privacy and network use
 
 Launch Doctor analyzes your codebase locally on your device. Your source code, findings, and credentials are never uploaded to any remote server. Detected secrets are masked in reports (for example, `sk_live_…exe9`).
@@ -367,6 +399,7 @@ Launch Doctor analyzes your codebase locally on your device. Your source code, f
 - **Live site scan (`scan <url>`):** sends ordinary `GET` requests to the address you give and to Supabase when your page uses it. Nothing is sent anywhere else, and nothing is uploaded.
 - **Git history analysis (`--history`):** Runs local `git log` commands directly on your system without network requests.
 - **Pull request comments (`--pr-comment`):** calls the GitHub API with the workflow's token to read the pull request's changed files and post comments. It only runs on GitHub Actions and sends finding titles, explanations, fix prompts and file paths, never your source code.
+- **MCP server (`mcp`):** talks to your AI tool over stdin and stdout only; it opens no port. Its tools make the same network calls as the CLI: email DNS lookups for `scan_project` (unless `offline`), and the requests to the site you name for `scan_url`.
 - **Package installation:** standard `npx` retrieval via the npm registry.
 
 ## Limitations
@@ -384,7 +417,7 @@ For applications processing significant financial transactions or sensitive pers
 
 - [x] Live URL inspection (`launch-doctor scan <url>`: exposed `.env`, source maps, security headers, open Supabase tables via anonymous key)
 - [x] GitHub Action that posts a summary and inline fix prompts on pull requests ([Pull request comments](#pull-request-comments))
-- [ ] Model Context Protocol (MCP) server for direct Claude Code and Cursor integration
+- [x] Model Context Protocol (MCP) server for direct Claude Code and Cursor integration ([MCP server](#mcp-server))
 - [ ] Extended provider coverage (Clerk, Convex, Appwrite, Lemon Squeezy, Paddle)
 - [ ] Mobile framework support (Expo, React Native)
 
