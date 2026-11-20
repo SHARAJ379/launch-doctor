@@ -223,6 +223,8 @@ export class ProjectContext {
   /** Text files we read. */
   readonly files: SourceFile[] = [];
   truncated = false;
+  /** Folders left out because they are separate git repositories (they have their own .git folder). */
+  readonly nestedRepos: string[] = [];
   readonly deps = new Set<string>();
   readonly imports = new Set<string>();
   readonly scripts: string[] = [];
@@ -248,6 +250,8 @@ export class ProjectContext {
     this.root = resolve(root);
     this.options = options;
     this.maxFiles = options.maxFiles ?? MAX_FILES;
+    // Known before the walk, so folders that are separate git repositories can be left out.
+    this.gitRoot = options.useGit === false ? null : findGitRoot(this.root);
     this.readIgnoreFile();
     this.walk();
     this.readPackages();
@@ -265,7 +269,6 @@ export class ProjectContext {
     }
     this.name = name;
 
-    this.gitRoot = options.useGit === false ? null : findGitRoot(this.root);
     this.tracked = this.gitRoot ? gitLsFiles(this.root) : null;
 
     const fullStack = [
@@ -337,6 +340,11 @@ export class ProjectContext {
         if (entry.isDirectory()) {
           if (SKIP_DIRS.has(entry.name)) continue;
           if (entry.name.startsWith('.') && entry.name !== '.github') continue;
+          // Another project cloned inside this one (like a tool you're trying out) isn't part of this app.
+          if (this.gitRoot && isSeparateRepo(join(abs, entry.name))) {
+            this.nestedRepos.push(relPath);
+            continue;
+          }
           stack.push(relPath);
           continue;
         }
@@ -643,6 +651,23 @@ function git(cwd: string, args: string[]): string | null {
 function samePath(a: string, b: string): boolean {
   const norm = (p: string) => resolve(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   return norm(a) === norm(b);
+}
+
+/**
+ * Does this folder hold a different git repository? A .git folder means a separate clone.
+ * A .git file means a submodule (part of this project, so it's scanned) or a worktree
+ * (a second checkout of the same code, so it's not).
+ */
+function isSeparateRepo(dir: string): boolean {
+  const dotGit = join(dir, '.git');
+  try {
+    const stat = statSync(dotGit, { throwIfNoEntry: false });
+    if (!stat) return false;
+    if (stat.isDirectory()) return true;
+    return /[\\/]worktrees[\\/]/.test(readFileSync(dotGit, 'utf8'));
+  } catch {
+    return false;
+  }
 }
 
 function findGitRoot(root: string): string | null {

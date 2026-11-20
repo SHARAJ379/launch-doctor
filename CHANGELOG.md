@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--pr-comment` posts the same pull request comments from the CLI. It never fails the run: outside a pull request, or without write access, it explains why it skipped.
 - When `GITHUB_OUTPUT` is set, the grade, score, critical and warning counts are saved as step outputs.
 
+### Fixed
+
+- A separate git repository inside the project folder (a folder with its own `.git`, like a tool you cloned to try out) is no longer scanned as part of your app. Its findings used to drag your grade down. The report names what was left out, and `--json` lists it under `nestedRepos`. Submodules are still scanned, and a folder outside git is scanned as before.
+- Stopping `--demo` with Ctrl+C (or SIGTERM/SIGHUP) no longer leaves its sample project in the temp folder, and `--demo` removes `launch-doctor-demo-*` folders over an hour old that earlier killed runs left behind.
+
 ## [0.2.0] - 2026-11-04
 
 ### Added

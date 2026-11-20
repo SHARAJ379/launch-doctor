@@ -134,6 +134,7 @@ export async function runDoctor(root: string, options: Options = {}): Promise<Re
     truncated: ctx.truncated,
     ignored,
     unknownIgnoreIds,
+    ...(ctx.nestedRepos.length ? { nestedRepos: ctx.nestedRepos } : {}),
     ...summary,
     categories,
     generatedAt: new Date().toISOString(),

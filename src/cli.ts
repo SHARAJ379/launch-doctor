@@ -2,7 +2,7 @@
 import { appendFileSync, existsSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { applyBaseline, BASELINE_FILE, loadBaseline, writeBaseline } from './baseline.js';
-import { createDemoProject } from './demo.js';
+import { createDemoProject, removeOnSignal } from './demo.js';
 import { renderFixes } from './fixes.js';
 import { explainGitHubError, postPrFeedback, prContextFromEnv } from './github.js';
 import { failingFindings } from './grade.js';
@@ -340,9 +340,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  let stopDemoCleanup: (() => void) | undefined;
   if (args.demo) {
     if (args.path) fail('--demo scans a built-in sample app, so leave out the folder');
-    args.path = createDemoProject();
+    // Ctrl+C mid-scan would otherwise skip the finally below and leave the folder in the temp directory.
+    let demoDir: string | undefined;
+    stopDemoCleanup = removeOnSignal(() => demoDir);
+    demoDir = createDemoProject();
+    args.path = demoDir;
     args.offline = true;
     if (!args.out) args.writeFile = false;
     if (!args.json)
@@ -365,7 +370,10 @@ async function main(): Promise<void> {
     });
   } finally {
     // The demo project lives in a temp folder; always clean it up, even if the scan throws.
-    if (args.demo) rmSync(root, { recursive: true, force: true });
+    if (args.demo) {
+      rmSync(root, { recursive: true, force: true });
+      stopDemoCleanup?.();
+    }
   }
 
   if (report.filesScanned === 0) {
