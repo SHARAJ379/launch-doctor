@@ -155,16 +155,18 @@ flowchart LR
 
 | Category | What it catches | Severity range |
 |---|---|---|
-| Secrets & keys (`secrets`) | Stripe, OpenAI, Anthropic, OpenRouter, Groq, Hugging Face, Supabase, AWS, GitHub, Slack, SendGrid, and Resend keys in code; Supabase `service_role` keys; private keys; database URLs with passwords; secrets in `NEXT_PUBLIC_` / `VITE_` variables; `.env` files committed or not in `.gitignore`; with `--history`, keys still in git history | Warning to critical |
-| Database & backups (`database`) | Supabase tables without Row Level Security; policies that let anyone write (`using (true)`); write policies open to any signed-in user; Firebase test-mode or open rules; SQLite on serverless hosting; `prisma db push` / `--accept-data-loss` instead of migrations | Warning to critical |
-| Payments (`payments`) | Stripe webhooks that don't verify the signature (each route checked separately); webhooks or global `express.json()` that parse the body before verifying; no webhook at all; Razorpay payments never verified on the server | Warning to critical |
+| Secrets & keys (`secrets`) | Stripe, Clerk, OpenAI, Anthropic, OpenRouter, Groq, Hugging Face, Supabase, AWS, GitHub, Slack, SendGrid, Resend, Paddle, Convex, Appwrite, and Lemon Squeezy keys in code; Supabase `service_role` keys; private keys; database URLs with passwords; secrets in `NEXT_PUBLIC_` / `VITE_` / `EXPO_PUBLIC_` variables; keys in mobile app code (they ship inside the app); `.env` files committed or not in `.gitignore`; with `--history`, keys still in git history | Warning to critical |
+| Database & backups (`database`) | Supabase tables without Row Level Security; policies that let anyone write (`using (true)`); write policies open to any signed-in user; Firebase test-mode or open rules; Convex mutations and actions anyone can call without signing in; Appwrite permissions that let anyone (or every signed-in user) change data; SQLite on serverless hosting; `prisma db push` / `--accept-data-loss` instead of migrations | Warning to critical |
+| Payments (`payments`) | Stripe, Lemon Squeezy, and Paddle webhooks that don't verify the signature (each route checked separately); webhooks or global `express.json()` that parse the body before verifying, or sign re-encoded JSON; no webhook at all; Razorpay payments never verified on the server | Warning to critical |
 | AI & API costs (`costs`) | Paid AI or SMS APIs called from the browser; `dangerouslyAllowBrowser: true`; AI endpoints with no login check (middleware only counts if it really blocks `/api`); no real rate limiter | Warning to critical |
 | Email delivery (`email`) | Resend's test sender; personal Gmail SMTP; sender domains that don't exist; missing SPF or DMARC (live DNS check); Supabase's built-in test mailer | Warning |
-| Errors & monitoring (`monitoring`) | No error tracking (Sentry, PostHog, and others); no error boundary or `error.tsx`, so crashes show a blank page | Warning |
-| Legal & trust (`legal`) | No privacy policy, terms, refund policy, or contact page; no way for users to delete their account; cookie analytics without consent | Warning |
-| First impressions (`first-impressions`) | "Vite + React" / "Create Next App" titles and descriptions; Vite favicon; Lovable default meta tags; no description or social preview image; hard-coded `localhost` URLs | Warning |
+| Errors & monitoring (`monitoring`) | No error tracking or crash reporting (Sentry, PostHog, Crashlytics, and others); no error boundary or `error.tsx`, so crashes show a blank page | Warning |
+| Legal & trust (`legal`) | No privacy policy, terms, refund policy, or contact page; no way for users to delete their account; cookie analytics without consent; a store app with no privacy policy link | Warning |
+| First impressions (`first-impressions`) | "Vite + React" / "Create Next App" titles and descriptions; Vite favicon; Lovable default meta tags; no description or social preview image; hard-coded `localhost` URLs. For mobile apps: placeholder app IDs (`com.anonymous...`), cleartext HTTP on Android, `NSAllowsArbitraryLoads` on iOS, development addresses like `10.0.2.2` | Warning |
 
-Each category also adds **"check yourself"** items for things code cannot show, such as automated database backups, provider spending limits, a real test purchase, and uptime monitoring. Monitoring, legal, and first impressions checks only run on web apps (a frontend framework, server routes, or an `index.html`). Command-line tools and libraries skip them automatically.
+Each category also adds **"check yourself"** items for things code cannot show, such as automated database backups, provider spending limits, a real test purchase, uptime monitoring, switching Clerk to a production instance, and the app store listing and privacy forms.
+
+Monitoring, legal, and first impressions checks run on web apps (a frontend framework, server routes, or an `index.html`) and on mobile apps (Expo and React Native), which get mobile versions of them: crash reporting, a privacy policy link for the stores, app ID and network security settings, and a store-readiness checklist. Command-line tools and libraries skip them automatically. In a monorepo with a website and an app, both sets run. A folder inside your project that is a separate git repository (it has its own `.git` folder and isn't a submodule) is left out, and the report says so.
 
 ## Live site scan
 
@@ -410,6 +412,7 @@ Launch Doctor provides rapid pre-launch hygiene, not a full penetration test or 
 - It cannot inspect third-party web dashboards. Settings configured via web consoles in Supabase, Firebase, Stripe, or cloud hosts appear on the "check yourself" manual checklist.
 - JavaScript, TypeScript, and Python codebases receive the deepest static analysis coverage.
 - Route analysis works per handler and follows local imports 2 levels deep. Dynamic imports and unusual route shapes may not be followed.
+- For mobile apps, Launch Doctor reads the Expo config (`app.json`, `app.config.*`), `AndroidManifest.xml` and `Info.plist`. Gradle and Xcode project files are not read.
 
 For applications processing significant financial transactions or sensitive personal health data, combine automated checks with a human security review.
 
@@ -418,8 +421,8 @@ For applications processing significant financial transactions or sensitive pers
 - [x] Live URL inspection (`launch-doctor scan <url>`: exposed `.env`, source maps, security headers, open Supabase tables via anonymous key)
 - [x] GitHub Action that posts a summary and inline fix prompts on pull requests ([Pull request comments](#pull-request-comments))
 - [x] Model Context Protocol (MCP) server for direct Claude Code and Cursor integration ([MCP server](#mcp-server))
-- [ ] Extended provider coverage (Clerk, Convex, Appwrite, Lemon Squeezy, Paddle)
-- [ ] Mobile framework support (Expo, React Native)
+- [x] Extended provider coverage (Clerk, Convex, Appwrite, Lemon Squeezy, Paddle)
+- [x] Mobile framework support (Expo, React Native)
 
 ## Contributing
 

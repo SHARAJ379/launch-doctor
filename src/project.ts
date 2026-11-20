@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { stripComments } from './comments.js';
 import type { Options } from './types.js';
 
@@ -68,6 +68,7 @@ const TEXT_EXT = new Set([
   '.mdx',
   '.txt',
   '.xml',
+  '.plist',
 ]);
 
 const SPECIAL_NAMES = new Set([
@@ -136,6 +137,30 @@ export function isRouteLike(f: SourceFile): boolean {
     /@(?:app|router|bp|blueprint|api)\.(?:route|get|post|put|patch|delete)\s*\(|\burlpatterns\s*=/.test(f.content)
   );
 }
+
+/** Mobile app frameworks: their code ships inside the app people install. */
+const MOBILE_PACKAGES = ['expo', 'react-native'];
+
+/** Web frameworks that make a React Native / Expo project a website too (react and react-dom alone don't). */
+const WEB_FRAMEWORKS = [
+  'next',
+  'vite',
+  'react-scripts',
+  'vue',
+  'svelte',
+  'nuxt',
+  'astro',
+  '@sveltejs/kit',
+  'solid-js',
+  'preact',
+  '@angular/core',
+  '@remix-run/react',
+  'lit',
+];
+
+/** Files in a mobile app's folder that don't ship inside the app. */
+const MOBILE_NOT_SHIPPED =
+  /(^|\/)(server|api|backend|functions|scripts|supabase|e2e|__tests__)\/|\+api\.[cm]?[jt]sx?$|\.server\.[cm]?[jt]sx?$|(^|\/)(metro|babel|jest|eslint|tailwind|postcss|webpack|vitest)\.config\./;
 
 const FRONTEND_PACKAGES = [
   'react',
@@ -235,6 +260,10 @@ export class ProjectContext {
    * Monitoring, legal pages and first impressions only matter for web apps.
    */
   readonly isWebApp: boolean;
+  /** Is this a React Native / Expo app (or does it contain one)? */
+  readonly isMobileApp: boolean;
+  /** Every package.json folder ("" for the root), and whether it is a mobile app. */
+  private readonly packageDirs: { dir: string; mobile: boolean }[] = [];
   /** Finding / checklist ids silenced in .launchdoctorignore. */
   readonly ignoredIds = new Set<string>();
   private ignoredPathRules = '';
@@ -286,11 +315,17 @@ export class ProjectContext {
     ];
     this.isSpa = (this.uses('vite') || this.uses('react-scripts')) && !fullStack.some((p) => this.uses(p));
 
+    this.isMobileApp = this.packageDirs.some((p) => p.mobile);
+    const indexHtml = this.paths.some((p) => /^(?:public\/)?index\.html?$/i.test(p));
     // HTML under docs/ (and coverage/, node_modules/, which are never read) doesn't make a project a website.
-    this.isWebApp =
-      this.usesAny(FRONTEND_PACKAGES) ||
-      this.files.some((f) => isCodeFile(f) && !isTestPath(f.path) && !/(^|\/)docs\//.test(f.path) && isRouteLike(f)) ||
-      this.paths.some((p) => /^(?:public\/)?index\.html?$/i.test(p));
+    // A React Native app uses react too, and its server folder is the app's backend, not a website.
+    this.isWebApp = this.isMobileApp
+      ? this.usesAny(WEB_FRAMEWORKS) || indexHtml
+      : this.usesAny(FRONTEND_PACKAGES) ||
+        this.files.some(
+          (f) => isCodeFile(f) && !isTestPath(f.path) && !/(^|\/)docs\//.test(f.path) && isRouteLike(f),
+        ) ||
+        indexHtml;
   }
 
   // ---------- reading the project ----------
@@ -377,9 +412,15 @@ export class ProjectContext {
       if (name === 'package.json') {
         try {
           const pkg = JSON.parse(file.content);
+          let mobile = false;
           for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
-            for (const dep of Object.keys(pkg[field] ?? {})) this.deps.add(dep);
+            for (const dep of Object.keys(pkg[field] ?? {})) {
+              this.deps.add(dep);
+              if (MOBILE_PACKAGES.includes(dep)) mobile = true;
+            }
           }
+          const dir = dirname(file.path);
+          this.packageDirs.push({ dir: dir === '.' ? '' : dir, mobile });
           for (const script of Object.values(pkg.scripts ?? {})) {
             if (typeof script === 'string') this.scripts.push(script);
           }
@@ -543,8 +584,26 @@ export class ProjectContext {
     return result;
   }
 
+  /** Is this file part of a React Native / Expo app (the closest package.json is a mobile one)? */
+  isMobileFile(path: string): boolean {
+    if (!this.isMobileApp) return false;
+    let best: { dir: string; mobile: boolean } | undefined;
+    for (const pkg of this.packageDirs) {
+      const inside = pkg.dir === '' || path === pkg.dir || path.startsWith(`${pkg.dir}/`);
+      if (inside && (!best || pkg.dir.length > best.dir.length)) best = pkg;
+    }
+    return best?.mobile ?? false;
+  }
+
   private computeIsClient(file: SourceFile): boolean {
     const p = file.path;
+    // Everything in a mobile app ships inside the app people install, including Expo's app config ("extra" values).
+    if (this.isMobileFile(p)) {
+      if (/(^|\/)app\.(?:json|config\.[cm]?[jt]s)$/.test(p)) return true;
+      if (isCodeFile(p) && !/\.(py|rb|php|go|html?)$/i.test(p) && !MOBILE_NOT_SHIPPED.test(p) && !isTestPath(p)) {
+        return !looksLikeServerCode(file.content);
+      }
+    }
     if (!isCodeFile(p) || /\.(py|rb|php|go)$/i.test(p)) return false;
     if (/\.html?$/i.test(p)) return !/(^|\/)(server|api|templates?|emails?)\//i.test(p);
     if (/^\s*["']use client["'];?\s*$/m.test(file.content.slice(0, 400))) return true;
