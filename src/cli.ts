@@ -204,7 +204,7 @@ const SCAN_HELP = `
     --no-db               Don't test Supabase tables with the public key found in the page
     -h, --help            Show this help
 
-  Only scan sites you own or are allowed to test. The scan makes about 40 ordinary GET requests
+  Only scan sites you own or are allowed to test. The scan makes a few dozen ordinary GET requests
   and never changes anything. Database rows are never saved or shown.
 `;
 

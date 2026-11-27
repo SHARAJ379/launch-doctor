@@ -76,7 +76,7 @@ flowchart TD
     Start["User / CI triggers: launch-doctor"] --> ParseArgs["1. Argument & Option Parsing"]
     ParseArgs --> LoadContext["2. Project Ingestion & File Discovery"]
     LoadContext --> DetectStack["3. Technology Stack & Environment Detection"]
-    DetectStack --> ChecksSuite["4. Multi-Category Check Execution"]
+    DetectStack --> ChecksSuite
     
     subgraph ChecksSuite["4. Evaluation across 8 Check Modules"]
         direction TB
@@ -93,7 +93,7 @@ flowchart TD
     
     ChecksSuite --> FilterIgnore["5. Suppression & Baseline Filtering"]
     FilterIgnore --> ScoringEngine["6. Scoring & Grading Engine"]
-    ScoringEngine --> OutputDispatch["7. Output & Artifact Dispatch"]
+    ScoringEngine --> OutputDispatch
     
     subgraph OutputDispatch["7. Multi-Target Outputs"]
         direction TB
@@ -111,9 +111,9 @@ flowchart TD
 1. **Argument parsing and validation (`src/cli.ts`):**
    Evaluates CLI flags, path arguments, targeted categories (`--only`, `--skip`), severity thresholds (`--fail-on`), output destinations (`--out`, `--sarif`), and runtime modifiers (`--ci`, `--offline`, `--history`, `--demo`).
 2. **Project ingestion and tree traversal (`src/project.ts`):**
-   Walks the project root, automatically skipping `node_modules`, build artifacts (`dist`, `build`, `.next`), binary formats, and hidden files. Ingests package manifests (`package.json`, `requirements.txt`, `pyproject.toml`), git status, and `.launchdoctorignore` patterns.
+   Walks the project root, automatically skipping `node_modules`, build artifacts (`dist`, `build`, `.next`), binary formats, and hidden folders (except `.github`). Ingests package manifests (`package.json`, `requirements.txt`, `pyproject.toml`), git status, and `.launchdoctorignore` patterns.
 3. **Stack and environment detection (`src/detect.ts`, `src/comments.ts`):**
-   Identifies frameworks (Next.js, Vite, React, Vue, Flask, Django), database configurations (Supabase, Firebase, Prisma), payment gateways (Stripe, Razorpay), error trackers (Sentry, PostHog), and email services. Prepares a comment-stripped view of source files so commented-out code is not mistaken for active protection.
+   Identifies frameworks (Next.js, Vite, React, Vue, Express), server routes (including Flask and Django), database configurations (Supabase, Firebase, Prisma), payment gateways (Stripe, Razorpay), error trackers (Sentry, PostHog), and email services. Prepares a comment-stripped view of source files so commented-out code is not mistaken for active protection.
 4. **Multi-category check execution (`src/checks/`):**
    Runs audits across all 8 categories. If `--history` is enabled, an incremental git commit walker inspects the last `n` commits (default 500) for secrets that were removed from HEAD but remain exposed in commit history.
 5. **Suppression and baseline matching (`src/baseline.ts`):**
@@ -168,7 +168,7 @@ Each category also adds **"check yourself"** items for things code cannot show, 
 
 ## Live site scan
 
-`npx launch-doctor scan https://myapp.com` checks your deployed site the way an attacker would, from the outside. It makes about 40 ordinary `GET` requests and never changes anything. Only scan sites you own or are allowed to test.
+`npx launch-doctor scan https://myapp.com` checks your deployed site the way an attacker would, from the outside. It makes a few dozen ordinary `GET` requests (at most about 90, when Supabase tables are tested) and never changes anything. Only scan sites you own or are allowed to test.
 
 | Category | What it catches | Severity range |
 |---|---|---|
@@ -327,7 +327,7 @@ Fix the issues in LAUNCH_FIXES.md one at a time, starting with the critical ones
 
 Launch Doctor analyzes your codebase locally on your device. Your source code, findings, and credentials are never uploaded to any remote server. Detected secrets are masked in reports (for example, `sk_live_…exe9`).
 
-- **Email DNS validation:** This is the only network check performed. When your project sends transactional email and a domain is identified (either discovered in code or specified via `--domain`), Launch Doctor queries your system DNS resolver for NS and TXT records (including root SPF, `send.<domain>`, `_dmarc.<domain>`, and common DKIM selectors). No code or private data is transmitted. Pass `--offline` to disable DNS lookups entirely. The `--demo` command never touches the network.
+- **Email DNS validation:** This is the only network check a folder scan performs. When your project sends transactional email and a domain is identified (either discovered in code or specified via `--domain`), Launch Doctor queries your system DNS resolver for NS and TXT records (including root SPF, `send.<domain>`, `_dmarc.<domain>`, and common DKIM selectors). No code or private data is transmitted. Pass `--offline` to disable DNS lookups entirely. The `--demo` command never touches the network.
 - **Live site scan (`scan <url>`):** sends ordinary `GET` requests to the address you give and to Supabase when your page uses it. Nothing is sent anywhere else, and nothing is uploaded.
 - **Git history analysis (`--history`):** Runs local `git log` commands directly on your system without network requests.
 - **Package installation:** standard `npx` retrieval via the npm registry.
