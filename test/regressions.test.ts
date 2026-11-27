@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { sweepStaleDemos } from '../src/demo.js';
 import { runDoctor } from '../src/index.js';
 import { matchesGitignore, packageNameOf } from '../src/project.js';
+import { nestedReposNote, renderReport } from '../src/report.js';
 import { category, fakeKey, git, hasGit, ids, makeProject } from './helpers.js';
 
 const opts = { offline: true, useGit: false };
@@ -652,7 +659,157 @@ test('a launch-doctor-ignore comment silences one finding at that spot only', as
   assert.equal(report.ignored, 6);
 });
 
+// ---- 0.3.0: found by testing Launch Doctor with Twin ----
+
+const nestedProject = () =>
+  makeProject({
+    'package.json': '{"name":"host-app"}',
+    'index.js': 'console.log("hello")\n',
+    'tools/other-project/package.json': '{"name":"someone-elses-tool"}',
+    'tools/other-project/leak.js': `export const k = "${fakeKey('sk_' + 'live_', 24)}";\n`,
+  });
+
+test('a separate git repository inside the project is left out of the scan', { skip: !hasGit() }, async () => {
+  const dir = nestedProject();
+  git(dir, 'init', '-q');
+  git(join(dir, 'tools/other-project'), 'init', '-q');
+  const report = await runDoctor(dir, { offline: true });
+  assert.deepEqual(report.nestedRepos, ['tools/other-project']);
+  assert.ok(!ids(report).includes('stripe-live-key'), 'the other project is not this app');
+  assert.match(renderReport(report), /Left out tools\/other-project\/: a separate git repository/);
+});
+
+test('without git, a folder with its own .git is still scanned', async () => {
+  const dir = nestedProject();
+  mkdirSync(join(dir, 'tools/other-project/.git'));
+  const report = await runDoctor(dir, opts);
+  assert.equal(report.nestedRepos, undefined);
+  assert.ok(ids(report).includes('stripe-live-key'));
+});
+
+test('git submodules are scanned, git worktrees are not', { skip: !hasGit() }, async () => {
+  const dir = nestedProject();
+  git(dir, 'init', '-q');
+  // A submodule's .git is a file that points into the parent's .git/modules.
+  writeFileSync(join(dir, 'tools/other-project/.git'), 'gitdir: ../../.git/modules/other-project\n');
+  const withSubmodule = await runDoctor(dir, { offline: true });
+  assert.equal(withSubmodule.nestedRepos, undefined);
+  assert.ok(ids(withSubmodule).includes('stripe-live-key'), 'a submodule ships with the app');
+
+  // A worktree's .git file points at .git/worktrees/<name>: a second checkout of the same code.
+  writeFileSync(join(dir, 'tools/other-project/.git'), 'gitdir: /somewhere/repo/.git/worktrees/other-project\n');
+  const withWorktree = await runDoctor(dir, { offline: true });
+  assert.deepEqual(withWorktree.nestedRepos, ['tools/other-project']);
+});
+
+test('nested repository note reads well for one and for several', () => {
+  assert.equal(
+    nestedReposNote(['Twin']),
+    'Left out Twin/: a separate git repository inside this folder. Scan it on its own.',
+  );
+  assert.equal(
+    nestedReposNote(['a', 'b', 'c', 'd']),
+    'Left out 4 separate git repositories inside this folder (a/, b/, c/ and 1 more). Scan them on their own.',
+  );
+});
+
+test('demo folders left behind by killed runs are removed, and nothing else', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ld-sweep-'));
+  const twoHoursAgo = (Date.now() - 2 * 60 * 60 * 1000) / 1000;
+  const stale = join(tmp, 'launch-doctor-demo-stale');
+  const fresh = join(tmp, 'launch-doctor-demo-running');
+  const other = join(tmp, 'someone-elses-folder');
+  for (const d of [stale, fresh, other]) mkdirSync(d);
+  utimesSync(stale, twoHoursAgo, twoHoursAgo);
+  utimesSync(other, twoHoursAgo, twoHoursAgo);
+  assert.equal(sweepStaleDemos(Date.now(), tmp), 1);
+  assert.ok(!existsSync(stale));
+  assert.ok(existsSync(fresh), 'a demo that is running right now is left alone');
+  assert.ok(existsSync(other), 'folders that are not ours are never touched');
+});
+
+test('Ctrl+C during --demo still removes its temp folder', { skip: process.platform === 'win32' }, async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'ld-sigint-'));
+  const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
+  const child = spawn(process.execPath, [cli, '--demo'], {
+    env: { ...process.env, TMPDIR: tmp, NO_COLOR: '1' },
+    stdio: 'ignore',
+  });
+  const demoFolders = () => readdirSync(tmp).filter((n) => n.startsWith('launch-doctor-demo-'));
+  const started = Date.now();
+  while (!demoFolders().length && Date.now() - started < 10_000) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(demoFolders().length, 'the demo folder appeared');
+  child.kill('SIGINT');
+  const code = await new Promise<number | null>((r) => child.on('close', (c) => r(c)));
+  assert.deepEqual(demoFolders(), [], 'no demo folder left behind');
+  assert.ok(code === 130 || code === 0, `exit code ${code}`);
+});
+
 // ---- found while trying the tool as a user ----
+
+const fastapiAi = (body: string) => ({
+  'requirements.txt': 'fastapi\ngoogle-genai\nsupabase\n',
+  'app.py':
+    'from fastapi import FastAPI, HTTPException\nfrom google import genai\napp = FastAPI()\nclient = genai.Client()\n\n' +
+    `@app.post("/ask")\ndef ask(q: str):\n${body}    return client.models.generate_content(model="m", contents=q).text\n`,
+});
+
+test('a hand-written limiter that answers 429 counts as rate limiting (Python, counter kept in the database)', async () => {
+  const report = await runDoctor(
+    makeProject(
+      fastapiAi(
+        '    result = db.rpc("consume_rate_limit", {"p_key": q}).execute()\n' +
+          '    if not result.data[0]["allowed"]:\n        raise HTTPException(429, "rate_limit_exceeded")\n',
+      ),
+    ),
+    opts,
+  );
+  assert.ok(!ids(report).includes('no-rate-limit'), ids(report).join(', '));
+  assert.ok(report.stack.includes('FastAPI') && report.stack.includes('Gemini'), report.stack.join(', '));
+});
+
+test("passing on the AI provider's own RateLimitError as a 429 is not rate limiting", async () => {
+  const report = await runDoctor(
+    makeProject(
+      fastapiAi(
+        '    try:\n        pass\n    except genai.errors.RateLimitError:\n        raise HTTPException(429, "busy")\n',
+      ),
+    ),
+    opts,
+  );
+  assert.ok(ids(report).includes('no-rate-limit'), ids(report).join(', '));
+});
+
+test('the rate-limit fix prompt suggests a library for the project stack', async () => {
+  const promptFor = async (files: Record<string, string>) =>
+    category(await runDoctor(makeProject(files), opts), 'costs').findings.find((f) => f.id === 'no-rate-limit')
+      ?.fixPrompt ?? '';
+  assert.match(await promptFor(fastapiAi('')), /slowapi/);
+  assert.doesNotMatch(await promptFor(fastapiAi('')), /@upstash/);
+  assert.match(
+    await promptFor({
+      'requirements.txt': 'flask\nopenai\n',
+      'app.py':
+        'from flask import Flask\nimport openai\napp = Flask(__name__)\n@app.route("/a", methods=["POST"])\ndef a():\n    return openai.chat.completions.create(model="m", messages=[])\n',
+    }),
+    /Flask-Limiter/,
+  );
+  assert.match(
+    await promptFor({
+      'package.json': JSON.stringify({ dependencies: { express: '5', openai: '5' } }),
+      'server.js':
+        "const app = require('express')();\napp.post('/a', async () => openai.chat.completions.create({}));\n",
+    }),
+    /express-rate-limit/,
+  );
+  assert.match(
+    await promptFor({
+      'package.json': JSON.stringify({ dependencies: { next: '16', openai: '5' } }),
+      'app/api/chat/route.ts': 'export async function POST() { return openai.chat.completions.create({}); }\n',
+    }),
+    /@upstash\/ratelimit/,
+  );
+});
 
 test('a DNS lookup that fails is retried, and never reported as a missing record', async () => {
   const { checkEmailDns, applyEmailDns } = await import('../src/checks/email.js');
@@ -715,4 +872,32 @@ test('an import written inside a string is not a dependency', async () => {
   assert.ok(!report.stack.includes('Razorpay') && !report.stack.includes('Stripe'));
   assert.ok(!ids(report).includes('razorpay-unverified'));
   assert.equal(category(report, 'payments').applicable, false);
+});
+
+test('a Paddle webhook that never imports the Paddle SDK is still found when its path names Paddle', async () => {
+  const report = await runDoctor(
+    makeProject({
+      'package.json': JSON.stringify({ dependencies: { next: '16', '@paddle/paddle-node-sdk': '2' } }),
+      'app/api/paddle/route.ts':
+        'export async function POST(req: Request) {\n  const e = await req.json();\n  if (e.event_type === "transaction.completed") {}\n  return new Response("ok");\n}\n',
+    }),
+    opts,
+  );
+  const found = category(report, 'payments').findings.map((f) => `${f.id}/${f.severity}`);
+  assert.ok(found.includes('paddle-webhook-unverified/critical'), found.join(', '));
+  assert.ok(!found.some((f) => f.startsWith('paddle-no-webhook')), found.join(', '));
+});
+
+test('Expo, React Native and the newer providers are named in the stack', async () => {
+  const report = await runDoctor(
+    makeProject({
+      'package.json': JSON.stringify({
+        dependencies: { expo: '54', 'react-native': '0.81', '@paddle/paddle-node-sdk': '2', appwrite: '17' },
+      }),
+    }),
+    opts,
+  );
+  for (const label of ['Expo', 'React Native', 'Paddle', 'Appwrite']) {
+    assert.ok(report.stack.includes(label), `${label} missing from ${report.stack.join(', ')}`);
+  }
 });

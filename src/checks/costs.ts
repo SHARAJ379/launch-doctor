@@ -53,6 +53,30 @@ const RATE_LIMIT_PACKAGES = [
 const RATE_LIMIT_USAGE =
   /new\s+Ratelimit\s*\(|Ratelimit\.slidingWindow\s*\(|\brateLimit\s*\(\s*\{|new\s+RateLimiter\w*\s*\(|\blimiter\.(?:limit|consume|removeTokens)\s*\(|@limiter\.limit\s*\(|\barcjet\s*\(/;
 
+/**
+ * A hand-written limiter: something named like a rate limit (not the provider's RateLimitError) together
+ * with a 429 "Too Many Requests" response. Many apps keep the counter in their own database or Redis.
+ */
+const CUSTOM_LIMIT_NAME = /rate[_-]?limit(?!\w*(?:Error|Exception))/i;
+const TOO_MANY_REQUESTS = /\b429\b|HTTP_429|too[_ ]many[_ ]requests|TooManyRequests/i;
+
+export function hasCustomLimiter(code: string): boolean {
+  return CUSTOM_LIMIT_NAME.test(code) && TOO_MANY_REQUESTS.test(code);
+}
+
+/** The rate-limit library to suggest for this project's server framework. */
+function rateLimitLibrary(ctx: ProjectContext): string {
+  if (ctx.uses('fastapi')) return 'slowapi (made for FastAPI)';
+  if (ctx.uses('flask')) return 'Flask-Limiter';
+  if (ctx.uses('django')) return 'django-ratelimit';
+  if (ctx.uses('express')) return 'express-rate-limit (with a Redis store if I run more than one server)';
+  if (ctx.uses('fastify')) return '@fastify/rate-limit';
+  if (ctx.uses('hono')) return 'hono-rate-limiter';
+  if (ctx.usesAny(['next', '@sveltejs/kit', 'nuxt', 'astro', '@remix-run/node']) || ctx.hasPath(/(^|\/)vercel\.json$/))
+    return '@upstash/ratelimit (works on Vercel and other serverless hosts)';
+  return 'a rate-limiting library that fits my stack';
+}
+
 /** Code in a middleware file that actually turns away signed-out requests. */
 const MIDDLEWARE_BLOCKS =
   /\.protect\s*\(|status\s*:\s*401|NextResponse\.redirect\s*\(|\bredirect\s*\([^)]*["'`][^"'`]*\/(?:login|sign-?in)\b/i;
@@ -192,10 +216,14 @@ export const costsCheck: Check = {
     // 3. Rate limiting: an imported rate-limit package, or code that really sets up a limiter.
     // (Comments and "RateLimitError" handling don't count.)
     const projectRateLimited =
-      RATE_LIMIT_PACKAGES.some((p) => ctx.imported(p)) || ctx.findCode(RATE_LIMIT_USAGE, server, 1).length > 0;
+      RATE_LIMIT_PACKAGES.some((p) => ctx.imported(p)) ||
+      ctx.findCode(RATE_LIMIT_USAGE, server, 1).length > 0 ||
+      ctx.files.some((f) => server(f) && hasCustomLimiter(ctx.codeOf(f)));
     // With analysed handlers, a limiter only counts for a handler that can reach it (or that middleware covers).
-    const limitedHere = (h: RouteHandler): boolean =>
-      RATE_LIMIT_USAGE.test(evidenceOf(ctx, h).scope) || middlewareCovers(ctx, h, RATE_LIMIT_USAGE);
+    const limitedHere = (h: RouteHandler): boolean => {
+      const scope = evidenceOf(ctx, h).scope;
+      return RATE_LIMIT_USAGE.test(scope) || hasCustomLimiter(scope) || middlewareCovers(ctx, h, RATE_LIMIT_USAGE);
+    };
     const unlimitedHandlers = aiHandlers.filter((h) => !limitedHere(h));
     const legacyAiRoutes = aiRoutes.length > 0;
     const rateLimited = aiHandlers.length
@@ -208,10 +236,14 @@ export const costsCheck: Check = {
         id: 'no-rate-limit',
         severity: 'warning',
         title: usesAI ? 'No rate limiting on your AI features' : 'No rate limiting on paid API calls',
-        why: 'One user — or one bot — can send thousands of requests a minute, and you pay for every one. A simple limit per user (say 20 a minute) protects your wallet.',
+        why:
+          'One user — or one bot — can send thousands of requests a minute, and you pay for every one. A simple limit per user (say 20 a minute) protects your wallet. ' +
+          'We looked for a rate-limit package being used, or your own limit check that answers with HTTP 429 "Too Many Requests", and found neither.',
         fixPrompt:
-          `Add rate limiting to the endpoints in my app that call paid APIs (${usesAI ? 'AI' : 'SMS'}). Limit each signed-in user (and each IP address for signed-out visitors) to a sensible number of requests per minute and per day, ` +
-          `return a friendly "slow down" message when they hit it, and use @upstash/ratelimit (works on Vercel/serverless) unless my stack already has a better option.`,
+          `Launch Doctor found no rate limiting on the endpoints in my app that call paid APIs (${usesAI ? 'AI' : 'SMS'}). First check whether I already limit requests somewhere it couldn't see ` +
+          `(for example in my database, Redis, a gateway or my host's settings); if I do, show me where and confirm it covers these endpoints. ` +
+          `If not, limit each signed-in user (and each IP address for signed-out visitors) to a sensible number of requests per minute and per day, ` +
+          `return a friendly "slow down" message with HTTP 429 when they hit it, and use ${rateLimitLibrary(ctx)}.`,
       });
     }
 
