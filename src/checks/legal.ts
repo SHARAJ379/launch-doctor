@@ -84,7 +84,7 @@ export const legalCheck: Check = {
           id: 'no-refund-policy',
           severity: 'warning',
           title: 'No refund or cancellation policy',
-          why: 'Payment providers (Razorpay in particular) require a refund/cancellation policy on your site before turning on live payments, and a clear policy means fewer angry chargebacks.',
+          why: 'Payment providers (Razorpay in particular, and Stripe for some businesses) expect a refund/cancellation policy on your site before live payments, and a clear policy means fewer angry chargebacks.',
           fixPrompt:
             'Create a /refund page with a clear refund and cancellation policy for my app (how to cancel, whether and when refunds are given, how long they take, contact email). Link it from the footer and the checkout/pricing page.',
         });

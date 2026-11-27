@@ -60,7 +60,7 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement at
-[INSERT CONTACT METHOD].
+the maintainer through [GitHub private vulnerability reporting](https://github.com/SHARAJ379/launch-doctor/security/advisories/new) or by opening a private message to [@SHARAJ379](https://github.com/SHARAJ379).
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

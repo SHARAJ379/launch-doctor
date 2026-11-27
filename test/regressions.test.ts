@@ -651,3 +651,31 @@ test('a launch-doctor-ignore comment silences one finding at that spot only', as
   assert.ok(!ids(report).includes('supabase-rls-missing'));
   assert.equal(report.ignored, 6);
 });
+
+// ---- found while trying the tool as a user ----
+
+test('settings that only mention a sensitive word are not secrets (VITE_PASSWORD_MIN_LENGTH)', async () => {
+  const report = await runDoctor(
+    makeProject({
+      'package.json': JSON.stringify({ dependencies: { vite: '6', react: '19' } }),
+      '.env.example': 'VITE_PASSWORD_MIN_LENGTH=8\nVITE_SECRET_QUESTION_COUNT=3\n',
+      'src/a.ts': 'export const n = import.meta.env.VITE_PASSWORD_MIN_LENGTH;\n',
+    }),
+    opts,
+  );
+  assert.ok(!ids(report).includes('public-secret-variable'));
+});
+
+test('an import written inside a string is not a dependency', async () => {
+  const report = await runDoctor(
+    makeProject({
+      'package.json': JSON.stringify({ name: 'tool' }),
+      'src/help.ts': 'export const help = `import Razorpay from "razorpay"; import Stripe from "stripe"`;\n',
+      'src/real.ts': 'import { Resend } from "resend";\nexport const r = Resend;\n',
+    }),
+    opts,
+  );
+  assert.ok(!report.stack.includes('Razorpay') && !report.stack.includes('Stripe'));
+  assert.ok(!ids(report).includes('razorpay-unverified'));
+  assert.equal(category(report, 'payments').applicable, false);
+});

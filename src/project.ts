@@ -416,6 +416,7 @@ export class ProjectContext {
       IMPORT_RE.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = IMPORT_RE.exec(file.content))) {
+        if (insideString(file.content, m.index)) continue;
         const pkg = packageNameOf(m[1]!);
         if (pkg) this.imports.add(pkg);
       }
@@ -607,6 +608,12 @@ export class ProjectContext {
     if (!out.includes('Prisma') && this.uses('prisma') && out.length < 7) out.push('Prisma');
     return out;
   }
+}
+
+/** Is this position inside a template literal or double-quoted string on its line (like help text showing an import)? */
+function insideString(text: string, index: number): boolean {
+  const before = text.slice(text.lastIndexOf('\n', index - 1) + 1, index);
+  return (before.match(/`/g)?.length ?? 0) % 2 === 1 || (before.match(/"/g)?.length ?? 0) % 2 === 1;
 }
 
 /** Code that only makes sense on a server, even if it sits in a frontend folder. */

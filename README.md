@@ -32,7 +32,7 @@ Requires Node.js 22 or newer.
 ## Example output
 
 ```
-  Launch Doctor v0.1.0
+  Launch Doctor v0.2.0
   Checked my-weekend-saas · 12 files · Vite, React, Supabase, Stripe, OpenAI
 
   Overall grade  F   Not ready to launch: fix 6 critical issues first

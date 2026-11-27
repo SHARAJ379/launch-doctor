@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings that only mention a sensitive word (for example `VITE_PASSWORD_MIN_LENGTH`) are no longer reported as secrets exposed through a public variable.
+- An `import ... from "pkg"` written inside a string (help text, prompts, docs) no longer counts as using that package, which caused false payment and AI findings.
+
 ## [0.2.0] - 2026-11-04
 
 ### Added
