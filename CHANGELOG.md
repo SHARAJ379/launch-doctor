@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-27
+
 ### Fixed
 
 - Settings that only mention a sensitive word (for example `VITE_PASSWORD_MIN_LENGTH`) are no longer reported as secrets exposed through a public variable.
@@ -69,6 +71,7 @@ First release.
 - `.launchdoctorignore` for silencing findings by id or skipping paths.
 - Support for JavaScript / TypeScript and Python projects.
 
-[Unreleased]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/SHARAJ379/launch-doctor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SHARAJ379/launch-doctor/releases/tag/v0.1.0
