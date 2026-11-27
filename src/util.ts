@@ -1,3 +1,6 @@
+/** Where people report false alarms, misses and crashes. */
+export const ISSUES_URL = 'https://github.com/SHARAJ379/launch-doctor/issues/new/choose';
+
 /** 1-based line number of a character index. */
 export function lineAt(text: string, index: number): number {
   let line = 1;

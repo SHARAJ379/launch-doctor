@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.2] - 2026-11-27
 
+### Changed
+
+- The README now says plainly what Launch Doctor can and cannot do: a "Read this first" summary, a "What it cannot do" section (production settings, runtime errors, authorization logic, code-level vulnerabilities, dependency vulnerabilities, stack coverage and skipped files), how it is tested, and how to report a wrong finding. The live scan's network use is described fully: it also fetches the page's scripts and source maps, which may be on other domains.
+- The terminal report and `LAUNCH_FIXES.md` end with a link for reporting wrong or missed findings.
+
 ### Added
 
 - FastAPI, Flask, Django and Gemini are recognised and shown in the report header.

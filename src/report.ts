@@ -1,6 +1,6 @@
 import { shortWhere } from './checks/common.js';
 import type { CategoryResult, Finding, Grade, Report } from './types.js';
-import { plural } from './util.js';
+import { ISSUES_URL, plural } from './util.js';
 
 const useColor =
   !process.env.NO_COLOR && (process.env.FORCE_COLOR ? process.env.FORCE_COLOR !== '0' : !!process.stdout.isTTY);
@@ -142,6 +142,8 @@ export function renderReport(report: Report, opts: { fixFile?: string } = {}): s
     );
     lines.push('');
   }
+
+  lines.push(`  ${dim(`Wrong finding or a missed problem? Please report it: ${ISSUES_URL}`)}`, '');
 
   return `${lines.join('\n')}\n`;
 }

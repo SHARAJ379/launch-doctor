@@ -7,7 +7,18 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D22-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Launch Doctor scans your project for the problems that hurt apps after launch: leaked API keys, databases anyone can read, payments that can be faked, emails that land in spam, AI endpoints that can run up your bill, missing legal pages, and leftover template defaults. It is built for developers who ship with AI coding tools (Claude Code, Cursor, Lovable, Bolt, Windsurf) and may not read every line of generated code. Every finding is explained in plain English and includes a prompt you can paste straight back into your AI assistant. It has no runtime dependencies, requires no account, and your code never leaves your machine.
+Launch Doctor scans your project for common problems that hurt apps after launch: leaked API keys, databases anyone can read, payments that can be faked, emails that land in spam, AI endpoints that can run up your bill, missing legal pages, and leftover template defaults. It is built for developers who ship with AI coding tools (Claude Code, Cursor, Lovable, Bolt, Windsurf) and may not read every line of generated code. Every finding is explained in plain English and includes a prompt you can paste straight back into your AI assistant. It has no runtime dependencies, requires no account, sends no telemetry, and your code never leaves your machine.
+
+## Read this first
+
+Launch Doctor is a **quick checklist with teeth, not a security audit**. Please trust it accordingly:
+
+- **It reads your code with pattern rules.** It does not run your app, log in, or understand your business logic. It will sometimes flag code that is fine (a false alarm) and sometimes miss a real problem.
+- **It cannot see your production settings.** Environment variables in Vercel or Netlify, and settings in the Supabase, Firebase or Stripe dashboards, are invisible to it. A typo in a production key or URL will not be caught.
+- **A grade A means "none of the problems we look for were found"**, not "your app is secure".
+- **It is new.** Version 0.x, first released in November 2026, maintained by one person. The checks are tested (see [How it is tested](#how-it-is-tested)), but it has not yet been used on many real projects, so expect rough edges and please [report them](#found-a-wrong-finding).
+
+The full list is in [What it cannot do](#what-it-cannot-do).
 
 ## Quick start
 
@@ -27,12 +38,14 @@ Initialize configuration and GitHub Actions files:
 npx launch-doctor init
 ```
 
-Requires Node.js 22 or newer.
+Requires Node.js 22 or newer. That is the version range the automated tests cover (22 and 24). In a manual check it also ran on Node 18 and 20, but those versions are not tested on every change, so they are not officially supported.
 
 ## Example output
 
+This is the `--demo` report, shortened. On a real project the last line tells you where `LAUNCH_FIXES.md` was saved (the demo doesn't write it).
+
 ```
-  Launch Doctor v0.2.0
+  Launch Doctor v0.2.2
   Checked my-weekend-saas · 12 files · Vite, React, Supabase, Stripe, OpenAI
 
   Overall grade  F   Not ready to launch: fix 6 critical issues first
@@ -59,8 +72,6 @@ Requires Node.js 22 or newer.
       so every visitor can read it. That prefix is only for values that are safe
       to be public.
   ...
-
-  Fix prompts saved to LAUNCH_FIXES.md
 ```
 
 ## Project workflow
@@ -113,7 +124,7 @@ flowchart TD
 2. **Project ingestion and tree traversal (`src/project.ts`):**
    Walks the project root, automatically skipping `node_modules`, build artifacts (`dist`, `build`, `.next`), binary formats, and hidden folders (except `.github`). Ingests package manifests (`package.json`, `requirements.txt`, `pyproject.toml`), git status, and `.launchdoctorignore` patterns.
 3. **Stack and environment detection (`src/detect.ts`, `src/comments.ts`):**
-   Identifies frameworks (Next.js, Vite, React, Vue, Express), server routes (including Flask and Django), database configurations (Supabase, Firebase, Prisma), payment gateways (Stripe, Razorpay), error trackers (Sentry, PostHog), and email services. Prepares a comment-stripped view of source files so commented-out code is not mistaken for active protection.
+   Identifies frameworks (Next.js, Vite, React, Vue, Express, FastAPI, Flask, Django), server routes, database configurations (Supabase, Firebase, Prisma), payment gateways (Stripe, Razorpay), error trackers (Sentry, PostHog), and email services. Prepares a comment-stripped view of source files so commented-out code is not mistaken for active protection.
 4. **Multi-category check execution (`src/checks/`):**
    Runs audits across all 8 categories. If `--history` is enabled, an incremental git commit walker inspects the last `n` commits (default 500) for secrets that were removed from HEAD but remain exposed in commit history.
 5. **Suppression and baseline matching (`src/baseline.ts`):**
@@ -141,7 +152,7 @@ flowchart LR
     ReScan --> Check
     Check -- "Clean (Grade A or Baseline)" --> Commit["6. Commit & Push Code"]
     Commit --> CI["7. CI/CD PR Gate (--ci)"]
-    CI --> Deploy["8. Safe Production Launch"]
+    CI --> Deploy["8. Deploy (and check the manual checklist)"]
 ```
 
 1. **Pre-flight scan:** Before shipping changes or merging a branch, run `npx launch-doctor` in your workspace.
@@ -168,7 +179,9 @@ Most categories also add **"check yourself"** items for things code cannot show,
 
 ## Live site scan
 
-`npx launch-doctor scan https://myapp.com` checks your deployed site the way an attacker would, from the outside. It makes a few dozen ordinary `GET` requests (at most about 90, when Supabase tables are tested) and never changes anything. Only scan sites you own or are allowed to test.
+`npx launch-doctor scan https://myapp.com` checks your deployed site from the outside for a few things attackers and bots look for first. It makes a few dozen ordinary `GET` requests (at most about 90, when Supabase tables are tested) and never changes anything. Only scan sites you own or are allowed to test.
+
+What it looks at: your home page, up to 20 JavaScript files that page loads, their source maps, a fixed list of file paths (`/.env`, `/.git/...`, `backup.sql` and similar), and Supabase tables named in that JavaScript. It does not crawl other pages, log in, fill in forms, or call your API, and it only tests whether Supabase tables can be **read**, not written.
 
 | Category | What it catches | Severity range |
 |---|---|---|
@@ -333,22 +346,61 @@ Fix the issues in LAUNCH_FIXES.md one at a time, starting with the critical ones
 Launch Doctor analyzes your codebase locally on your device. Your source code, findings, and credentials are never uploaded to any remote server. Detected secrets are masked in reports (for example, `sk_live_…exe9`).
 
 - **Email DNS validation:** This is the only network check a folder scan performs. When your project sends transactional email and a domain is identified (either discovered in code or specified via `--domain`), Launch Doctor queries your system DNS resolver for NS and TXT records (including root SPF, `send.<domain>`, `_dmarc.<domain>`, and common DKIM selectors). No code or private data is transmitted. Pass `--offline` to disable DNS lookups entirely. The `--demo` command never touches the network.
-- **Live site scan (`scan <url>`):** sends ordinary `GET` requests to the address you give and to Supabase when your page uses it. Nothing is sent anywhere else, and nothing is uploaded.
+- **Live site scan (`scan <url>`):** sends ordinary `GET` requests to the address you give, to the JavaScript files and source maps that page loads (which may be on another domain, such as a CDN), and to your Supabase project when the page uses one. For the Supabase test it sends the public anon key it found in your page back to your own Supabase project. Nothing else is sent, and nothing is uploaded.
+- **No telemetry:** Launch Doctor does not collect usage data or phone home.
 - **Git history analysis (`--history`):** Runs local `git log` commands directly on your system without network requests.
 - **Package installation:** standard `npx` retrieval via the npm registry.
 
-## Limitations
+## What it cannot do
 
-Launch Doctor provides rapid pre-launch hygiene, not a full penetration test or manual security audit:
+Launch Doctor is useful because it is fast and specific. That also means it has clear blind spots. If any of these matter for your app, use another tool or a human review as well.
 
-- It uses pattern analysis and heuristic inspection; it may occasionally flag safe code or miss complex multi-file logic. Use `.launchdoctorignore` or inline comments where appropriate.
-- It cannot inspect third-party web dashboards. Settings configured via web consoles in Supabase, Firebase, Stripe, or cloud hosts appear on the "check yourself" manual checklist.
-- JavaScript, TypeScript, and Python codebases receive the deepest static analysis coverage.
-- Route analysis works per handler and follows local imports 2 levels deep. Dynamic imports and unusual route shapes may not be followed.
+**It doesn't see your running app or your production settings**
+- Production environment variables (Vercel, Netlify, Render and others) are invisible. A malformed URL, a wrong key or a bad model name in production will not be caught.
+- Settings made in the Supabase, Firebase or Stripe dashboards are invisible. Tables created in the Supabase dashboard (rather than in SQL migrations in your repo) can't be checked for Row Level Security from the code, so you only get a reminder (`scan` can at least test whether they can be read on your live site).
+- It doesn't run your app, call your API or read your logs (apart from the `GET` requests of `scan`), so errors that only happen at runtime are not found.
 
-For applications processing significant financial transactions or sensitive personal health data, combine automated checks with a human security review.
+**It doesn't do a full security review**
+- It doesn't check your own authorization logic, for example whether user A can open user B's order through your API. The only access-control rules it understands are Supabase RLS in SQL files and Firebase rules files.
+- It doesn't look for XSS, SQL injection, CSRF, SSRF or similar code-level vulnerabilities.
+- It doesn't check your dependencies for known vulnerabilities. Use `npm audit`, `pip-audit` or Dependabot for that.
+- It is not a penetration test, and its legal-page checks are reminders, not legal advice.
+
+**It decides by patterns, so it can be wrong both ways**
+- Logins, rate limiters and webhook checks are recognised by common names and libraries. Code written in an unusual way may be reported as missing (a false alarm), and code that only looks right may pass (a miss).
+- Route analysis follows local imports 2 levels deep. Dynamic imports and unusual route shapes may not be followed.
+- API-only backends can get legal-page warnings (privacy policy, terms) that may not apply to them.
+- A folder with very little code (for example only a README) can get an A, because there was nothing to find.
+
+**Coverage depends on your stack**
+- **Deepest:** JavaScript and TypeScript (Next.js, Vite/React, Express and similar), with Supabase, Firebase, Prisma, Stripe, Razorpay, and the common AI and email providers.
+- **Good:** Python (FastAPI, Flask, Django): secrets, AI costs, Stripe webhooks, Supabase and the web-app checks.
+- **Basic:** Ruby, PHP and Go are scanned for hard-coded secrets and a few patterns, but their frameworks and dependency files are not understood.
+- **Not supported yet:** mobile apps (Expo, React Native). Clerk, Convex, Paddle and Lemon Squeezy are recognised but have no checks of their own, and Appwrite isn't recognised at all.
+
+**It skips some files**
+- `node_modules`, `dist`, `build`, `out`, `coverage`, `vendor`, `venv`, `target`, `generated` and a few other build or dependency folders, and hidden folders other than `.github` (such as `.venv` and `.next`).
+- Files over 1 MB, minified `.min.js` files, source maps and binary files.
+- Everything after the first 20,000 files (the report says when this happens).
+
+For apps that handle significant money or sensitive personal or health data, use Launch Doctor as a first pass and get a human security review.
+
+## How it is tested
+
+- 117 automated tests run on every change, on Windows, macOS and Linux, with Node.js 22 and 24.
+- Every check in the [What it checks](#what-it-checks) and [Live site scan](#live-site-scan) tables has been confirmed against a small project (or fake site) that contains exactly that problem, and every command in this README has been run (the `scan` examples against a local test site rather than a real one).
+- Every bug fix gets a regression test, so the same mistake doesn't come back.
+- What hasn't happened yet is wide real-world use. Most false alarms are found when the tool meets code written differently from what it has seen, so your reports make the biggest difference.
+
+## Found a wrong finding?
+
+If Launch Doctor reports something that is fine, misses a real problem, or crashes, please open an issue: [report a false alarm](https://github.com/SHARAJ379/launch-doctor/issues/new?template=false_positive.yml) or [report a bug](https://github.com/SHARAJ379/launch-doctor/issues/new?template=bug_report.yml). A short code snippet that reproduces it (with any keys removed) is the most helpful thing you can include. Fixes are released as small patch versions.
+
+Meanwhile you can silence a finding with `.launchdoctorignore` or an inline `launch-doctor-ignore` comment (see [Configuration](#configuration)).
 
 ## Roadmap
+
+Planned work, in no fixed order and without dates:
 
 - [x] Live URL inspection (`launch-doctor scan <url>`: exposed `.env`, source maps, security headers, open Supabase tables via anonymous key)
 - [ ] GitHub Action bot to post interactive review comments on pull requests
@@ -366,7 +418,7 @@ Thanks to everyone who has helped build Launch Doctor. Contributors are listed h
 
 - [@SHARAJ379](https://github.com/SHARAJ379): creator and maintainer
 
-Want to be on this list? Pick an open issue labelled `good first issue` or `help wanted`.
+Want to be on this list? Reporting a false alarm with a small example is a great first contribution, and issues labelled `good first issue` or `help wanted` are a good place to start once there are some.
 
 ## Security
 
