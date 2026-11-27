@@ -2,7 +2,7 @@
 
 **A pre-launch checkup for vibe-coded apps: one command, an A-F grade, and a fix prompt for every problem.**
 
-[![CI](https://github.com/namaysingh3925/launch-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/namaysingh3925/launch-doctor/actions/workflows/ci.yml)
+[![CI](https://github.com/SHARAJ379/launch-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/SHARAJ379/launch-doctor/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/launch-doctor)](https://www.npmjs.com/package/launch-doctor)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -359,8 +359,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for local environment setup, architecture
 
 Thanks to everyone who has helped build Launch Doctor. Contributors are listed here once their pull request is merged.
 
-- [@namaysingh3925](https://github.com/namaysingh3925): creator and maintainer
-- [@SHARAJ379](https://github.com/SHARAJ379): route-aware analysis of AI endpoints (#4)
+- [@SHARAJ379](https://github.com/SHARAJ379): creator and maintainer
 
 Want to be on this list? Pick an open issue labelled `good first issue` or `help wanted`.
 

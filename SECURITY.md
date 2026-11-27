@@ -6,7 +6,7 @@ Please **do not** open a public issue for security problems.
 
 Report them privately through GitHub's private vulnerability reporting:
 
-1. Go to the [Security tab](https://github.com/namaysingh3925/launch-doctor/security) of this repository.
+1. Go to the [Security tab](https://github.com/SHARAJ379/launch-doctor/security) of this repository.
 2. Click **Report a vulnerability**.
 3. Describe the problem, how to reproduce it (a minimal project folder is ideal) and the impact you expect.
 

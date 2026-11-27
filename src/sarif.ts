@@ -1,7 +1,7 @@
 import type { Finding, Report } from './types.js';
 
 const SCHEMA = 'https://json.schemastore.org/sarif-2.1.0.json';
-const INFO_URI = 'https://github.com/namaysingh3925/launch-doctor';
+const INFO_URI = 'https://github.com/SHARAJ379/launch-doctor';
 
 interface SarifOptions {
   /**

@@ -31,12 +31,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/namaysingh3925/launch-doctor.git"
+    "url": "git+https://github.com/SHARAJ379/launch-doctor.git"
   },
   "bugs": {
-    "url": "https://github.com/namaysingh3925/launch-doctor/issues"
+    "url": "https://github.com/SHARAJ379/launch-doctor/issues"
   },
-  "homepage": "https://github.com/namaysingh3925/launch-doctor#readme",
+  "homepage": "https://github.com/SHARAJ379/launch-doctor#readme",
   "keywords": [
     "launch-readiness",
     "production-readiness",
@@ -53,7 +53,7 @@
     "sarif",
     "cli"
   ],
-  "author": "Namay Singh",
+  "author": "Sharaj R Shetty",
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

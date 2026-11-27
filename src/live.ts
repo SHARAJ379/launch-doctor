@@ -42,7 +42,7 @@ interface Reply {
 
 const MAX_SCRIPTS = 20;
 const MAX_TABLES = 25;
-const USER_AGENT = `launch-doctor/${version()} (+https://github.com/namaysingh3925/launch-doctor)`;
+const USER_AGENT = `launch-doctor/${version()} (+https://github.com/SHARAJ379/launch-doctor)`;
 
 /** "myapp.com" or "https://myapp.com/x" -> a URL object. Throws a friendly error for anything else. */
 export function parseTarget(input: string): URL {

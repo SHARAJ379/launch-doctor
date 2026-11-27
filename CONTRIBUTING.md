@@ -9,7 +9,7 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first. Report security pro
 You need Node.js 22 or newer (the test command uses `node --test` glob patterns, and CI runs Node 22 and 24).
 
 ```bash
-git clone https://github.com/namaysingh3925/launch-doctor.git
+git clone https://github.com/SHARAJ379/launch-doctor.git
 cd launch-doctor
 npm install
 npm test                  # compiles TypeScript, then runs every test

@@ -63,6 +63,6 @@ First release.
 - `.launchdoctorignore` for silencing findings by id or skipping paths.
 - Support for JavaScript / TypeScript and Python projects.
 
-[Unreleased]: https://github.com/namaysingh3925/launch-doctor/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/namaysingh3925/launch-doctor/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/namaysingh3925/launch-doctor/releases/tag/v0.1.0
+[Unreleased]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/SHARAJ379/launch-doctor/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/SHARAJ379/launch-doctor/releases/tag/v0.1.0
