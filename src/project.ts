@@ -172,6 +172,9 @@ const PY_IMPORT_RE = /^[ \t]*(?:from|import)[ \t]+([A-Za-z_][\w.]*)/gm;
 
 /** Python package/module names mapped to the npm names the checks look for. */
 const PY_ALIASES: Record<string, string> = {
+  fastapi: 'fastapi',
+  flask: 'flask',
+  django: 'django',
   supabase: '@supabase/supabase-js',
   stripe: 'stripe',
   openai: 'openai',
@@ -586,6 +589,9 @@ export class ProjectContext {
       ['express', 'Express'],
       ['hono', 'Hono'],
       ['fastify', 'Fastify'],
+      ['fastapi', 'FastAPI'],
+      ['flask', 'Flask'],
+      ['django', 'Django'],
       ['@supabase/supabase-js', 'Supabase'],
       ['firebase', 'Firebase'],
       ['@prisma/client', 'Prisma'],
@@ -598,6 +604,8 @@ export class ProjectContext {
       ['next-auth', 'NextAuth'],
       ['openai', 'OpenAI'],
       ['@anthropic-ai/sdk', 'Anthropic'],
+      ['@google/genai', 'Gemini'],
+      ['@google/generative-ai', 'Gemini'],
       ['ai', 'Vercel AI SDK'],
     ];
     const out: string[] = [];

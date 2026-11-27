@@ -654,6 +654,70 @@ test('a launch-doctor-ignore comment silences one finding at that spot only', as
 
 // ---- found while trying the tool as a user ----
 
+const fastapiAi = (body: string) => ({
+  'requirements.txt': 'fastapi\ngoogle-genai\nsupabase\n',
+  'app.py':
+    'from fastapi import FastAPI, HTTPException\nfrom google import genai\napp = FastAPI()\nclient = genai.Client()\n\n' +
+    `@app.post("/ask")\ndef ask(q: str):\n${body}    return client.models.generate_content(model="m", contents=q).text\n`,
+});
+
+test('a hand-written limiter that answers 429 counts as rate limiting (Python, counter kept in the database)', async () => {
+  const report = await runDoctor(
+    makeProject(
+      fastapiAi(
+        '    result = db.rpc("consume_rate_limit", {"p_key": q}).execute()\n' +
+          '    if not result.data[0]["allowed"]:\n        raise HTTPException(429, "rate_limit_exceeded")\n',
+      ),
+    ),
+    opts,
+  );
+  assert.ok(!ids(report).includes('no-rate-limit'), ids(report).join(', '));
+  assert.ok(report.stack.includes('FastAPI') && report.stack.includes('Gemini'), report.stack.join(', '));
+});
+
+test("passing on the AI provider's own RateLimitError as a 429 is not rate limiting", async () => {
+  const report = await runDoctor(
+    makeProject(
+      fastapiAi(
+        '    try:\n        pass\n    except genai.errors.RateLimitError:\n        raise HTTPException(429, "busy")\n',
+      ),
+    ),
+    opts,
+  );
+  assert.ok(ids(report).includes('no-rate-limit'), ids(report).join(', '));
+});
+
+test('the rate-limit fix prompt suggests a library for the project stack', async () => {
+  const promptFor = async (files: Record<string, string>) =>
+    category(await runDoctor(makeProject(files), opts), 'costs').findings.find((f) => f.id === 'no-rate-limit')
+      ?.fixPrompt ?? '';
+  assert.match(await promptFor(fastapiAi('')), /slowapi/);
+  assert.doesNotMatch(await promptFor(fastapiAi('')), /@upstash/);
+  assert.match(
+    await promptFor({
+      'requirements.txt': 'flask\nopenai\n',
+      'app.py':
+        'from flask import Flask\nimport openai\napp = Flask(__name__)\n@app.route("/a", methods=["POST"])\ndef a():\n    return openai.chat.completions.create(model="m", messages=[])\n',
+    }),
+    /Flask-Limiter/,
+  );
+  assert.match(
+    await promptFor({
+      'package.json': JSON.stringify({ dependencies: { express: '5', openai: '5' } }),
+      'server.js':
+        "const app = require('express')();\napp.post('/a', async () => openai.chat.completions.create({}));\n",
+    }),
+    /express-rate-limit/,
+  );
+  assert.match(
+    await promptFor({
+      'package.json': JSON.stringify({ dependencies: { next: '16', openai: '5' } }),
+      'app/api/chat/route.ts': 'export async function POST() { return openai.chat.completions.create({}); }\n',
+    }),
+    /@upstash\/ratelimit/,
+  );
+});
+
 test('a DNS lookup that fails is retried, and never reported as a missing record', async () => {
   const { checkEmailDns, applyEmailDns } = await import('../src/checks/email.js');
   const refused = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' });

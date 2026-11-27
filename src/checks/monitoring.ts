@@ -46,7 +46,9 @@ export const monitoringCheck: Check = {
         id: 'no-error-tracking',
         severity: 'warning',
         title: 'No error tracking',
-        why: "When your app breaks for a user, you won't know unless they bother to tell you. Most people don't — they just leave.",
+        why:
+          "When your app breaks for a user, you won't know unless they bother to tell you. Most people don't — they just leave. " +
+          'We looked for an error tracker (Sentry, PostHog, Bugsnag, Rollbar, Datadog and others) in your dependencies and found none.',
         fixPrompt:
           'Add error tracking to my app with Sentry (it has a free plan). Set it up for both the frontend and the backend / API routes, keep the DSN in an environment variable, ' +
           "make sure it doesn't send passwords or personal data, and add a temporary test error I can trigger once to confirm errors show up in Sentry. Then remove the test.",

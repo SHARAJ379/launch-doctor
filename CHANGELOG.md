@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- FastAPI, Flask, Django and Gemini are recognised and shown in the report header.
+- Findings that have no file and line ("no rate limiting", "no error tracking") now say what Launch Doctor looked for, so you can check the claim yourself.
+
+### Fixed
+
+- A hand-written rate limiter (for example a counter kept in your database or Redis that answers with HTTP 429) now counts as rate limiting. Passing on the AI provider's own `RateLimitError` still doesn't.
+- The rate-limit fix prompt suggests a library for your stack (slowapi for FastAPI, Flask-Limiter, django-ratelimit, express-rate-limit, @upstash/ratelimit for serverless...) instead of always @upstash/ratelimit, and first asks your AI tool to check for an existing limiter.
+
 ## [0.2.1] - 2026-11-27
 
 ### Fixed
