@@ -654,6 +654,43 @@ test('a launch-doctor-ignore comment silences one finding at that spot only', as
 
 // ---- found while trying the tool as a user ----
 
+test('a DNS lookup that fails is retried, and never reported as a missing record', async () => {
+  const { checkEmailDns, applyEmailDns } = await import('../src/checks/email.js');
+  const refused = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' });
+  const tries = new Map<string, number>();
+  const flaky = (failures: number, records: Record<string, string[]>) => ({
+    async resolveNs() {
+      return ['ns1.example.net'];
+    },
+    async resolveTxt(name: string) {
+      const n = (tries.get(name) ?? 0) + 1;
+      tries.set(name, n);
+      if ((name === 'myapp.com' || name === '_dmarc.myapp.com') && n <= failures) throw refused;
+      if (records[name]) return records[name]!.map((r) => [r]);
+      throw Object.assign(new Error('ENODATA'), { code: 'ENODATA' });
+    },
+  });
+  const records = { 'myapp.com': ['v=spf1 include:_spf.example.net ~all'], '_dmarc.myapp.com': ['v=DMARC1; p=none'] };
+
+  // Fails once, works on the retry: found.
+  const retried = await checkEmailDns('myapp.com', flaky(1, records));
+  assert.equal(retried.spf, true);
+  assert.equal(retried.dmarc, true);
+
+  // Keeps failing: unknown, so a checklist item instead of a "no SPF / no DMARC" warning.
+  tries.clear();
+  const failing = await checkEmailDns('myapp.com', flaky(99, records));
+  assert.equal(failing.spf, null);
+  assert.equal(failing.dmarc, null);
+  const out = { applicable: true, findings: [], passed: [], manual: [] } as import('../src/types.js').CheckOutput;
+  applyEmailDns(out, 'myapp.com', failing, ['Resend']);
+  assert.deepEqual(
+    out.findings.map((f) => f.id),
+    [],
+  );
+  assert.ok(out.manual.some((m) => /SPF/.test(m.title)) && out.manual.some((m) => /DMARC/.test(m.title)));
+});
+
 test('settings that only mention a sensitive word are not secrets (VITE_PASSWORD_MIN_LENGTH)', async () => {
   const report = await runDoctor(
     makeProject({

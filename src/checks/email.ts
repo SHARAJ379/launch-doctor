@@ -93,9 +93,10 @@ export interface EmailDnsResult {
   offline: boolean;
   /** The domain itself doesn't exist (no NS records, ENOTFOUND). */
   notFound: boolean;
-  spf: boolean;
+  /** null: the lookup failed (timeout, refused), so we can't tell whether the record exists. */
+  spf: boolean | null;
   dkim: boolean;
-  dmarc: boolean;
+  dmarc: boolean | null;
 }
 
 /** The two DNS calls we need; a real Resolver, or a fake one in tests. */
@@ -118,20 +119,25 @@ export async function checkEmailDns(
     }
     // ENODATA (e.g. a subdomain without its own NS records) or a network error: carry on.
   }
-  const [root, sendSub, dmarc, ...dkim] = await Promise.all([
-    txt(resolver, domain),
-    txt(resolver, `send.${domain}`),
-    txt(resolver, `_dmarc.${domain}`),
-    ...DKIM_SELECTORS.map((s) => txt(resolver, `${s}._domainkey.${domain}`)),
-  ]);
-  const all = [root, sendSub, dmarc, ...dkim];
+  const names = [
+    domain,
+    `send.${domain}`,
+    `_dmarc.${domain}`,
+    ...DKIM_SELECTORS.map((s) => `${s}._domainkey.${domain}`),
+  ];
+  const all = await Promise.all(names.map((n) => txt(resolver, n)));
   if (all.every((r) => r === 'error')) return { offline: true, notFound: false, spf: false, dkim: false, dmarc: false };
+  // Large answers (long SPF records) need DNS over TCP, which often fails when many lookups run at once.
+  // Retry the failed ones one at a time before deciding anything.
+  for (let i = 0; i < all.length; i++) if (all[i] === 'error') all[i] = await txt(resolver, names[i]!);
+  const [root, sendSub, dmarc, ...dkim] = all;
   const has = (r: TxtResult | undefined, re: RegExp) => Array.isArray(r) && r.some((v) => re.test(v));
+  const spf = has(root, /^v=spf1/i) || has(sendSub, /^v=spf1/i);
   return {
     offline: false,
     notFound: false,
-    spf: has(root, /^v=spf1/i) || has(sendSub, /^v=spf1/i),
-    dmarc: has(dmarc, /^v=DMARC1/i),
+    spf: spf ? true : root === 'error' ? null : false,
+    dmarc: has(dmarc, /^v=DMARC1/i) ? true : dmarc === 'error' ? null : false,
     dkim: dkim.some((r) => has(r, /v=DKIM1|k=rsa|\bp=/i)),
   };
 }
@@ -160,7 +166,13 @@ export function applyEmailDns(out: CheckOutput, domain: string, dns: EmailDnsRes
     return;
   }
   if (dns.spf) out.passed.push(`${domain} has an SPF record`);
-  else {
+  else if (dns.spf === null) {
+    out.manual.push({
+      id: 'email-dns',
+      title: `Check the SPF record for ${domain}`,
+      how: "The DNS lookup failed (it timed out or was refused), so we couldn't tell whether the record exists. Your email provider's dashboard should show SPF as verified.",
+    });
+  } else {
     const returnPath = providers.find((p) => RETURN_PATH_PROVIDERS.includes(p));
     if (returnPath) {
       out.manual.push({
@@ -179,7 +191,13 @@ export function applyEmailDns(out: CheckOutput, domain: string, dns: EmailDnsRes
     }
   }
   if (dns.dmarc) out.passed.push(`${domain} has a DMARC record`);
-  else {
+  else if (dns.dmarc === null) {
+    out.manual.push({
+      id: 'email-dns',
+      title: `Check the DMARC record for ${domain}`,
+      how: `The DNS lookup failed (it timed out or was refused), so we couldn't tell whether the record exists. Look for a TXT record at _dmarc.${domain} in your DNS settings.`,
+    });
+  } else {
     out.findings.push({
       id: 'email-no-dmarc',
       severity: 'warning',

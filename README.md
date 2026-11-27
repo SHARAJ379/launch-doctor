@@ -123,7 +123,7 @@ flowchart TD
 7. **Multi-target reporting and artifact generation (`src/report.ts`, `src/fixes.ts`, `src/sarif.ts`, `src/summary.ts`):**
    Renders the CLI terminal dashboard, generates `LAUNCH_FIXES.md` with copy-paste prompts for AI models, outputs structured JSON or SARIF 2.1.0 files when requested, and populates GitHub Actions job summaries via `GITHUB_STEP_SUMMARY`.
 8. **Process exit resolution (`src/cli.ts`):**
-   Returns exit code 0 for clean runs (or CI runs without findings at or above `--fail-on`), code 1 for CI gate failures, and code 2 for invalid arguments or unexpected runtime errors.
+   Returns exit code 0 whenever the scan finishes (with `--ci`, only when nothing is at or above `--fail-on`), code 1 for CI gate failures, and code 2 for invalid arguments or unexpected runtime errors.
 
 ---
 
@@ -159,12 +159,12 @@ flowchart LR
 | Database & backups (`database`) | Supabase tables without Row Level Security; policies that let anyone write (`using (true)`); write policies open to any signed-in user; Firebase test-mode or open rules; SQLite on serverless hosting; `prisma db push` / `--accept-data-loss` instead of migrations | Warning to critical |
 | Payments (`payments`) | Stripe webhooks that don't verify the signature (each route checked separately); webhooks or global `express.json()` that parse the body before verifying; no webhook at all; Razorpay payments never verified on the server | Warning to critical |
 | AI & API costs (`costs`) | Paid AI or SMS APIs called from the browser; `dangerouslyAllowBrowser: true`; AI endpoints with no login check (middleware only counts if it really blocks `/api`); no real rate limiter | Warning to critical |
-| Email delivery (`email`) | Resend's test sender; personal Gmail SMTP; sender domains that don't exist; missing SPF or DMARC (live DNS check); Supabase's built-in test mailer | Warning |
+| Email delivery (`email`) | Resend's test sender; personal Gmail SMTP; sender domains that don't exist; missing SPF or DMARC (live DNS check); a checklist reminder when Supabase Auth still uses its built-in test mailer | Warning |
 | Errors & monitoring (`monitoring`) | No error tracking (Sentry, PostHog, and others); no error boundary or `error.tsx`, so crashes show a blank page | Warning |
-| Legal & trust (`legal`) | No privacy policy, terms, refund policy, or contact page; no way for users to delete their account; cookie analytics without consent | Warning |
+| Legal & trust (`legal`) | No privacy policy, terms, refund policy, or contact page; no way for users to delete their account; a checklist reminder about cookie consent when analytics set cookies | Warning |
 | First impressions (`first-impressions`) | "Vite + React" / "Create Next App" titles and descriptions; Vite favicon; Lovable default meta tags; no description or social preview image; hard-coded `localhost` URLs | Warning |
 
-Each category also adds **"check yourself"** items for things code cannot show, such as automated database backups, provider spending limits, a real test purchase, and uptime monitoring. Monitoring, legal, and first impressions checks only run on web apps (a frontend framework, server routes, or an `index.html`). Command-line tools and libraries skip them automatically.
+Most categories also add **"check yourself"** items for things code cannot show, such as automated database backups, provider spending limits, a real test purchase, and uptime monitoring. Monitoring, legal, and first impressions checks only run on web apps (a frontend framework, server routes, or an `index.html`). Command-line tools and libraries skip them automatically.
 
 ## Live site scan
 
@@ -293,11 +293,16 @@ jobs:
 ```
 
 - **Severity gating:** By default, `--ci` exits with code 1 only on critical findings. Add `--fail-on warning` to fail builds on warnings as well.
-- **Job summaries:** When running in GitHub Actions, Launch Doctor automatically writes a markdown summary (including overall grade, category scorecard, and itemized issues with file and line links) to the GitHub Actions job summary tab via `GITHUB_STEP_SUMMARY`.
-- **Code scanning alerts:** Export findings to SARIF 2.1.0 format to populate alerts directly in your repository Security tab:
+- **Job summaries:** When running in GitHub Actions, Launch Doctor automatically writes a markdown summary (including overall grade, category scorecard, and itemized issues with their file and line) to the GitHub Actions job summary tab via `GITHUB_STEP_SUMMARY`.
+- **Code scanning alerts:** Export findings to SARIF 2.1.0 format to populate alerts directly in your repository Security tab. The upload step needs permission to write security events, so add it to the job:
 
 ```yaml
-      - run: npx launch-doctor --sarif launch-doctor.sarif
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      # ...checkout and setup-node as above...
+      - run: npx launch-doctor --sarif launch-doctor.sarif --no-file
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
