@@ -459,8 +459,9 @@ For apps that handle significant money or sensitive personal or health data, use
 
 ## How it is tested
 
-- 117 automated tests run on every change, on Windows, macOS and Linux, with Node.js 22 and 24.
-- Every check in the [What it checks](#what-it-checks) and [Live site scan](#live-site-scan) tables has been confirmed against a small project (or fake site) that contains exactly that problem, and every command in this README has been run (the `scan` examples against a local test site rather than a real one).
+- 170 automated tests run on every change, on Windows, macOS and Linux, with Node.js 22 and 24.
+- Every check that existed in 0.2 has been confirmed against a small project (or fake site) that contains exactly that problem, and every command in this README has been run (the `scan` examples against a local test site rather than a real one).
+- The features new in 0.3.0 (the GitHub Action, the MCP server, mobile apps, and Clerk, Convex, Appwrite, Paddle and Lemon Squeezy) have their own tests and were spot-checked by hand, which found and fixed two bugs before release. They have been tried less than the older checks. Posting pull request comments is tested against a fake GitHub API; it has not yet run on many real pull requests.
 - Every bug fix gets a regression test, so the same mistake doesn't come back.
 - What hasn't happened yet is wide real-world use. Most false alarms are found when the tool meets code written differently from what it has seen, so your reports make the biggest difference.
 

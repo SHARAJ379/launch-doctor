@@ -75,7 +75,8 @@ interface WebhookProvider {
   name: string;
   prefix: string;
   /** Code that handles this provider's webhooks (event names, signature header). */
-  isWebhookCode: (content: string) => boolean;
+  /** `path` helps when the code itself never names the provider (an unverified handler often doesn't import its SDK). */
+  isWebhookCode: (content: string, path: string) => boolean;
   /** What to point at in a webhook file: an event name or the signature header. */
   locate: RegExp;
   verify: RegExp;
@@ -115,7 +116,7 @@ const PADDLE_EVENTS_RE =
 const PADDLE: WebhookProvider = {
   name: 'Paddle',
   prefix: 'paddle',
-  isWebhookCode: (c) => PADDLE_EVENTS_RE.test(c) && /paddle/i.test(c),
+  isWebhookCode: (c, path) => PADDLE_EVENTS_RE.test(c) && (/paddle/i.test(c) || /paddle/i.test(path)),
   locate: PADDLE_EVENTS_RE,
   verify:
     /webhooks\.unmarshal\s*\(|\.isSignatureValid\s*\(|createHmac\s*\(\s*["'`]sha256["'`]|crypto\.subtle\.(?:verify|sign)\s*\(/,
@@ -137,7 +138,7 @@ const PADDLE: WebhookProvider = {
 
 /** Signature checks for Lemon Squeezy and Paddle webhooks, the same way as for Stripe. */
 function checkWebhooks(ctx: ProjectContext, out: CheckOutput, server: FileFilter, p: WebhookProvider): void {
-  const hints = ctx.files.filter((f) => server(f) && p.isWebhookCode(ctx.codeOf(f)));
+  const hints = ctx.files.filter((f) => server(f) && p.isWebhookCode(ctx.codeOf(f), f.path));
   const routes = hints.filter((f) => isRouteLike(f) && READS_BODY.test(f.content));
   const v = verifier(ctx, server, p.verify);
   /** The first line in a file that matches, or just the file. */

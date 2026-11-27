@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A separate git repository inside the project folder (a folder with its own `.git`, like a tool you cloned to try out) is no longer scanned as part of your app. Its findings used to drag your grade down. The report names what was left out, and `--json` lists it under `nestedRepos`. Submodules are still scanned, and a folder outside git is scanned as before.
 - Stopping `--demo` with Ctrl+C (or SIGTERM/SIGHUP) no longer leaves its sample project in the temp folder, and `--demo` removes `launch-doctor-demo-*` folders over an hour old that earlier killed runs left behind.
 - A hand-written rate limiter (for example a counter kept in your database or Redis that answers with HTTP 429) now counts as rate limiting. Passing on the AI provider's own `RateLimitError` still doesn't.
+- A Paddle webhook that never imports the Paddle SDK (the dangerous, unverified kind) was reported as "no webhook"; it is now found when its file path names Paddle, and reported as unverified.
+- The MCP server said "No problems found" when every finding was in the baseline, right under an F grade. It now says no new problems were found and that the grade still counts the accepted ones.
+- Expo, React Native, Paddle, Lemon Squeezy and Appwrite are named in the report header.
 - The rate-limit fix prompt suggests a library for your stack (slowapi for FastAPI, Flask-Limiter, django-ratelimit, express-rate-limit, @upstash/ratelimit for serverless...) instead of always @upstash/ratelimit, and first asks your AI tool to check for an existing limiter.
 
 ## [0.2.1] - 2026-11-27

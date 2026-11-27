@@ -184,7 +184,14 @@ export function reportText(report: Report, includeBaseline = false): string {
       (m: ManualCheck, n) => `${n}. ${m.title} · id: ${m.id}\n${indent(m.how)}`,
     ),
   );
-  if (!shown.length) lines.push('', 'No problems found.');
+  if (!shown.length) {
+    lines.push(
+      '',
+      hiddenBaseline
+        ? `No new problems found. The grade still counts the ${plural(hiddenBaseline, 'known finding')} accepted in .launchdoctor-baseline.json.`
+        : 'No problems found.',
+    );
+  }
 
   lines.push(
     '',

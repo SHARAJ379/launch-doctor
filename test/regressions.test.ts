@@ -873,3 +873,31 @@ test('an import written inside a string is not a dependency', async () => {
   assert.ok(!ids(report).includes('razorpay-unverified'));
   assert.equal(category(report, 'payments').applicable, false);
 });
+
+test('a Paddle webhook that never imports the Paddle SDK is still found when its path names Paddle', async () => {
+  const report = await runDoctor(
+    makeProject({
+      'package.json': JSON.stringify({ dependencies: { next: '16', '@paddle/paddle-node-sdk': '2' } }),
+      'app/api/paddle/route.ts':
+        'export async function POST(req: Request) {\n  const e = await req.json();\n  if (e.event_type === "transaction.completed") {}\n  return new Response("ok");\n}\n',
+    }),
+    opts,
+  );
+  const found = category(report, 'payments').findings.map((f) => `${f.id}/${f.severity}`);
+  assert.ok(found.includes('paddle-webhook-unverified/critical'), found.join(', '));
+  assert.ok(!found.some((f) => f.startsWith('paddle-no-webhook')), found.join(', '));
+});
+
+test('Expo, React Native and the newer providers are named in the stack', async () => {
+  const report = await runDoctor(
+    makeProject({
+      'package.json': JSON.stringify({
+        dependencies: { expo: '54', 'react-native': '0.81', '@paddle/paddle-node-sdk': '2', appwrite: '17' },
+      }),
+    }),
+    opts,
+  );
+  for (const label of ['Expo', 'React Native', 'Paddle', 'Appwrite']) {
+    assert.ok(report.stack.includes(label), `${label} missing from ${report.stack.join(', ')}`);
+  }
+});

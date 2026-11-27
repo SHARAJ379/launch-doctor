@@ -191,3 +191,13 @@ test('MCP: --help explains setup and other options are refused', () => {
     });
   });
 });
+
+test('when every finding is in the baseline, the summary says so instead of "No problems found"', async () => {
+  const { runDoctor } = await import('../src/index.js');
+  const { reportText } = await import('../src/mcp.js');
+  const report = await runDoctor(leaky(), { offline: true, useGit: false });
+  for (const c of report.categories) for (const f of c.findings) f.baseline = true;
+  const text = reportText(report);
+  assert.doesNotMatch(text, /^No problems found\.$/m);
+  assert.match(text, /No new problems found\. The grade still counts the \d+ known findings? accepted/);
+});
