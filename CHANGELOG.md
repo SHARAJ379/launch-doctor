@@ -7,20 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.2] - 2026-11-27
-
-### Changed
-
-- The README now says plainly what Launch Doctor can and cannot do: a "Read this first" summary, a "What it cannot do" section (production settings, runtime errors, authorization logic, code-level vulnerabilities, dependency vulnerabilities, stack coverage and skipped files), how it is tested, and how to report a wrong finding. The live scan's network use is described fully: it also fetches the page's scripts and source maps, which may be on other domains.
-- The terminal report and `LAUNCH_FIXES.md` end with a link for reporting wrong or missed findings.
+## [0.3.0] - 2026-11-27
 
 ### Added
 
+- GitHub Action (`uses: SHARAJ379/launch-doctor@v0`): runs the checkup on pull requests, posts inline comments with fix prompts on the lines the pull request adds, and keeps one summary comment up to date. Inputs: `path`, `fail-on` (`critical`, `warning` or `never`), `comment`, `args`, `github-token`.
+- `--pr-comment` posts the same pull request comments from the CLI. It never fails the run: outside a pull request, or without write access, it explains why it skipped.
+- When `GITHUB_OUTPUT` is set, the grade, score, critical and warning counts are saved as step outputs.
+- `launch-doctor mcp` runs a Model Context Protocol server, so Claude Code, Cursor and other AI tools can run the checkup themselves. Tools: `scan_project` (grade, findings with file, line and fix prompt, and the checklist), `scan_url` (the live site scan) and `list_checks`. Stdio only, no dependencies, protocol versions 2024-11-05 to 2025-11-25.
+- Five more providers. Clerk: secret keys are told apart from Stripe's (same `sk_live_` prefix), and apps get a "switch to a production instance" checklist item. Paddle and Lemon Squeezy: webhooks that never verify the signature are critical, webhooks that sign re-encoded JSON or that are missing are warnings, and their API keys are found in code. Convex: deploy keys in code, and public mutations and actions that never check who is calling (in apps with accounts). Appwrite: API keys passed to `setKey()`, and permissions that let anyone (critical) or every signed-in user (warning) change data, in code and in `appwrite.json`.
+- Mobile apps (Expo and React Native). Keys in app code are critical, since they ship inside the app, and `EXPO_PUBLIC_` variables are treated like `NEXT_PUBLIC_` ones. Monitoring looks for crash reporting (Sentry, Crashlytics, Instabug and others). Legal asks every store app for a privacy policy link. First impressions finds placeholder app IDs (`com.anonymous...`), cleartext HTTP on Android, `NSAllowsArbitraryLoads` on iOS and development addresses like `10.0.2.2`, and adds the store-readiness checklist (listing, privacy forms, a reviewer account, a release build on a real phone). Website-only checks no longer run on a mobile app, and a monorepo with both gets both.
 - FastAPI, Flask, Django and Gemini are recognised and shown in the report header.
 - Findings that have no file and line ("no rate limiting", "no error tracking") now say what Launch Doctor looked for, so you can check the claim yourself.
 
+### Changed
+
+- The workflow written by `launch-doctor init` uses `actions/checkout@v7` and `actions/setup-node@v7`.
+- The README now says plainly what Launch Doctor can and cannot do: a "Read this first" summary, a "What it cannot do" section (production settings, runtime errors, authorization logic, code-level vulnerabilities, dependency vulnerabilities, stack coverage and skipped files), how it is tested, and how to report a wrong finding. The live scan's network use is described fully: it also fetches the page's scripts and source maps, which may be on other domains.
+- The terminal report and `LAUNCH_FIXES.md` end with a link for reporting wrong or missed findings.
+
 ### Fixed
 
+- A separate git repository inside the project folder (a folder with its own `.git`, like a tool you cloned to try out) is no longer scanned as part of your app. Its findings used to drag your grade down. The report names what was left out, and `--json` lists it under `nestedRepos`. Submodules are still scanned, and a folder outside git is scanned as before.
+- Stopping `--demo` with Ctrl+C (or SIGTERM/SIGHUP) no longer leaves its sample project in the temp folder, and `--demo` removes `launch-doctor-demo-*` folders over an hour old that earlier killed runs left behind.
 - A hand-written rate limiter (for example a counter kept in your database or Redis that answers with HTTP 429) now counts as rate limiting. Passing on the AI provider's own `RateLimitError` still doesn't.
 - The rate-limit fix prompt suggests a library for your stack (slowapi for FastAPI, Flask-Limiter, django-ratelimit, express-rate-limit, @upstash/ratelimit for serverless...) instead of always @upstash/ratelimit, and first asks your AI tool to check for an existing limiter.
 
@@ -88,8 +97,8 @@ First release.
 - `.launchdoctorignore` for silencing findings by id or skipping paths.
 - Support for JavaScript / TypeScript and Python projects.
 
-[Unreleased]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.2...HEAD
-[0.2.2]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.1...v0.2.2
+[Unreleased]: https://github.com/SHARAJ379/launch-doctor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/SHARAJ379/launch-doctor/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/SHARAJ379/launch-doctor/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SHARAJ379/launch-doctor/releases/tag/v0.1.0
