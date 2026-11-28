@@ -46,7 +46,7 @@ test('--json prints valid JSON', () => {
   assert.equal(res.status, 0, res.stderr);
   const report = JSON.parse(res.stdout);
   assert.equal(report.tool, 'launch-doctor');
-  assert.equal(report.categories.length, 8);
+  assert.equal(report.categories.length, 9);
 });
 
 test('--domain accepts full URLs in both forms', () => {

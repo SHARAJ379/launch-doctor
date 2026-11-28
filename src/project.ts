@@ -233,6 +233,10 @@ const PY_ALIASES: Record<string, string> = {
   'flask-limiter': 'limiter',
   slowapi: 'limiter',
   'django-ratelimit': 'limiter',
+  jwt: 'pyjwt',
+  pyjwt: 'pyjwt',
+  jose: 'python-jose',
+  'python-jose': 'python-jose',
 };
 
 function pythonDep(name: string): string | null {

@@ -127,7 +127,11 @@ export function resolveImport(ctx: ProjectContext, from: SourceFile, spec: strin
 }
 
 /** Local modules reachable from `text` (a handler body) through imports of `from`, up to MAX_DEPTH hops. */
-function reach(ctx: ProjectContext, from: SourceFile, text: string): { files: SourceFile[]; unresolved: boolean } {
+export function reach(
+  ctx: ProjectContext,
+  from: SourceFile,
+  text: string,
+): { files: SourceFile[]; unresolved: boolean } {
   const seen = new Set<string>([from.path]);
   const files: SourceFile[] = [];
   let unresolved = false;

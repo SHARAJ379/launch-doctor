@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/node-%3E%3D22-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Launch Doctor scans your project for common problems that hurt apps after launch: leaked API keys, databases anyone can read, payments that can be faked, emails that land in spam, AI endpoints that can run up your bill, missing legal pages, and leftover template defaults. It is built for developers who ship with AI coding tools (Claude Code, Cursor, Lovable, Bolt, Windsurf) and may not read every line of generated code. Every finding is explained in plain English and includes a prompt you can paste straight back into your AI assistant. It has no runtime dependencies, requires no account, sends no telemetry, and your code never leaves your machine.
+Launch Doctor scans your project for common problems that hurt apps after launch: leaked API keys, databases anyone can read, endpoints that let one user reach another user's data, payments that can be faked, emails that land in spam, AI endpoints that can run up your bill, missing legal pages, and leftover template defaults. It is built for developers who ship with AI coding tools (Claude Code, Cursor, Lovable, Bolt, Windsurf) and may not read every line of generated code. Every finding is explained in plain English and includes a prompt you can paste straight back into your AI assistant. It has no runtime dependencies, requires no account, sends no telemetry, and your code never leaves your machine.
 
 ## Read this first
 
@@ -46,12 +46,13 @@ This is the `--demo` report, shortened. On a real project the last line tells yo
 
 ```
   Launch Doctor v0.3.0
-  Checked my-weekend-saas · 12 files · Vite, React, Supabase, Stripe, OpenAI
+  Checked my-weekend-saas · 13 files · Vite, React, Supabase, Stripe, OpenAI
 
   Overall grade  F   Not ready to launch: fix 6 critical issues first
 
   F  Secrets & keys       2 critical · 1 to fix · 1 to check
   F  Database & backups   2 critical · 1 to check
+  B  Access control       1 to fix · 1 to check
   F  Payments             1 critical · 2 to check
   F  AI & API costs       1 critical · 1 to fix · 1 to check
   B  Email delivery       1 to fix · 3 to check
@@ -89,10 +90,11 @@ flowchart TD
     LoadContext --> DetectStack["3. Technology Stack & Environment Detection"]
     DetectStack --> ChecksSuite
     
-    subgraph ChecksSuite["4. Evaluation across 8 Check Modules"]
+    subgraph ChecksSuite["4. Evaluation across 9 Check Modules"]
         direction TB
         C1["Secrets & Keys Scan"]
         C2["Database Security & RLS"]
+        C2b["Access Control & Ownership"]
         C3["Payment Webhooks & Verification"]
         C4["AI Endpoints & Cost Controls"]
         C5["Email DNS & Configuration"]
@@ -126,7 +128,7 @@ flowchart TD
 3. **Stack and environment detection (`src/detect.ts`, `src/comments.ts`):**
    Identifies frameworks (Next.js, Vite, React, Vue, Express, FastAPI, Flask, Django), server routes, database configurations (Supabase, Firebase, Prisma), payment gateways (Stripe, Razorpay), error trackers (Sentry, PostHog), and email services. Prepares a comment-stripped view of source files so commented-out code is not mistaken for active protection.
 4. **Multi-category check execution (`src/checks/`):**
-   Runs audits across all 8 categories. If `--history` is enabled, an incremental git commit walker inspects the last `n` commits (default 500) for secrets that were removed from HEAD but remain exposed in commit history.
+   Runs audits across all 9 categories. If `--history` is enabled, an incremental git commit walker inspects the last `n` commits (default 500) for secrets that were removed from HEAD but remain exposed in commit history.
 5. **Suppression and baseline matching (`src/baseline.ts`):**
    Applies inline `launch-doctor-ignore <id>` comments and `.launchdoctorignore` path or id rules. If `.launchdoctor-baseline.json` is present and baseline mode is active, matches existing findings by ID, relative file path, and line content fingerprint.
 6. **Scoring and grading engine (`src/grade.ts`):**
@@ -168,6 +170,7 @@ flowchart LR
 |---|---|---|
 | Secrets & keys (`secrets`) | Stripe, Clerk, OpenAI, Anthropic, OpenRouter, Groq, Hugging Face, Supabase, AWS, GitHub, Slack, SendGrid, Resend, Paddle, Convex, Appwrite, and Lemon Squeezy keys in code; Supabase `service_role` keys; private keys; database URLs with passwords; secrets in `NEXT_PUBLIC_` / `VITE_` / `EXPO_PUBLIC_` variables; keys in mobile app code (they ship inside the app); `.env` files committed or not in `.gitignore`; with `--history`, keys still in git history | Warning to critical |
 | Database & backups (`database`) | Supabase tables without Row Level Security; policies that let anyone write (`using (true)`); write policies open to any signed-in user; Firebase test-mode or open rules; Convex mutations and actions anyone can call without signing in; Appwrite permissions that let anyone (or every signed-in user) change data; SQLite on serverless hosting; `prisma db push` / `--accept-data-loss` instead of migrations | Warning to critical |
+| Access control (`access`) | Next.js Server Actions and API routes (Next.js, Express, tRPC, FastAPI, Flask, Django) that change data without checking who is calling, in apps that have accounts; signed-in handlers that load or change a record by an id from the request with no owner filter, owner comparison, permission helper or admin check (an IDOR); roles or plans read from Supabase `user_metadata` or Clerk `unsafeMetadata`, which users can edit; whole request bodies saved to the database (mass assignment) and DRF serializers with `fields = "__all__"`; admin checks that only exist in browser code; JWTs decoded without verifying, or the `none` algorithm; `supabase.auth.getSession()` trusted in server code | Warning to critical |
 | Payments (`payments`) | Stripe, Lemon Squeezy, and Paddle webhooks that don't verify the signature (each route checked separately); webhooks or global `express.json()` that parse the body before verifying, or sign re-encoded JSON; no webhook at all; Razorpay payments never verified on the server | Warning to critical |
 | AI & API costs (`costs`) | Paid AI or SMS APIs called from the browser; `dangerouslyAllowBrowser: true`; AI endpoints with no login check (middleware only counts if it really blocks `/api`); no real rate limiter | Warning to critical |
 | Email delivery (`email`) | Resend's test sender; personal Gmail SMTP; sender domains that don't exist; missing SPF or DMARC (live DNS check); a checklist reminder when Supabase Auth still uses its built-in test mailer | Warning |
@@ -199,7 +202,7 @@ The report uses the same grades and `--json`, `--ci`, `--fail-on`, `--out` and `
   - Any critical finding caps the category at 39, which is an F.
   - Without a critical finding the score never drops below 40, so warnings alone cannot produce an F.
 - **Overall score** is the weighted average of the categories that ran:
-  - Weights: secrets (3), database (3), payments (3), costs (2), email (1), monitoring (1), legal (1), and first impressions (1).
+  - Weights: secrets (3), database (3), access control (3), payments (3), costs (2), email (1), monitoring (1), legal (1), and first impressions (1).
   - Categories that do not apply, or are skipped with `--only` / `--skip`, are excluded.
 - **Caps on the overall score:**
   - Any critical finding anywhere caps the overall score at 39 (F).
@@ -242,7 +245,7 @@ npx launch-doctor mcp
 | `mcp` | | Start an MCP server so AI coding tools can run checks themselves (see [MCP server](#mcp-server)) |
 | `--no-db` | off | With `scan`, don't test Supabase tables with the public key found in the page |
 
-Category ids for `--only` and `--skip`: `secrets`, `database`, `payments`, `costs`, `email`, `monitoring`, `legal`, `first-impressions`. Skipped categories show as "skipped" and don't count toward the grade.
+Category ids for `--only` and `--skip`: `secrets`, `database`, `access`, `payments`, `costs`, `email`, `monitoring`, `legal`, `first-impressions`. Skipped categories show as "skipped" and don't count toward the grade.
 
 **Exit codes**
 
@@ -433,7 +436,7 @@ Launch Doctor is useful because it is fast and specific. That also means it has 
 - It doesn't run your app, call your API or read your logs (apart from the `GET` requests of `scan`), so errors that only happen at runtime are not found.
 
 **It doesn't do a full security review**
-- It doesn't check your own authorization logic, for example whether user A can open user B's order through your API. The only access-control rules it understands are Supabase RLS in SQL files, Firebase rules files, Appwrite permissions, and whether Convex functions check who is calling.
+- Its authorization checks (the `access` category) look for specific, common patterns, not every way access control can fail. They follow one handler at a time: a sign-in check, an owner filter or a permission check done somewhere they can't see (a shared data-access layer, a database rule set up in a dashboard, an ORM extension) is invisible to them, so they may raise a false alarm. A handler that compares the wrong ids, checks the wrong role, or writes something harmless-looking next to the real query may pass. Express handlers are only analysed when they are written inside the `app.get(...)` / `router.post(...)` call; handlers defined in another file and registered by name are not followed. Apart from that, the access-control rules it understands are Supabase RLS in SQL files, Firebase rules files, Appwrite permissions, and whether Convex functions check who is calling.
 - It doesn't look for XSS, SQL injection, CSRF, SSRF or similar code-level vulnerabilities.
 - It doesn't check your dependencies for known vulnerabilities. Use `npm audit`, `pip-audit` or Dependabot for that.
 - It is not a penetration test, and its legal-page checks are reminders, not legal advice.
@@ -459,9 +462,10 @@ For apps that handle significant money or sensitive personal or health data, use
 
 ## How it is tested
 
-- 170 automated tests run on every change, on Windows, macOS and Linux, with Node.js 22 and 24.
+- 219 automated tests run on every change, on Windows, macOS and Linux, with Node.js 22 and 24.
 - Every check that existed in 0.2 has been confirmed against a small project (or fake site) that contains exactly that problem, and every command in this README has been run (the `scan` examples against a local test site rather than a real one).
 - The features new in 0.3.0 (the GitHub Action, the MCP server, mobile apps, and Clerk, Convex, Appwrite, Paddle and Lemon Squeezy) have their own tests and were spot-checked by hand, which found and fixed two bugs before release. They have been tried less than the older checks. Posting pull request comments is tested against a fake GitHub API; it has not yet run on many real pull requests.
+- The access-control category (new, not yet released) has 49 tests of its own, covering each rule and the correct patterns it must accept. It was also run on eight public open-source apps: Vercel's AI Chatbot, Taxonomy, Vercel's Next.js Subscription Payments starter, Next.js SaaS Starter, BoxyHQ SaaS Starter Kit, Documenso, the FastAPI full-stack template and OWASP Juice Shop. That turned up false alarms with six causes: admin-only FastAPI routes, admin-only tRPC procedures, a cookie mistaken for a database write, ownership checked by an earlier query in the same handler, ownership left to a helper called with the user's id, and a browser token library in a frontend it doesn't recognise. Each cause was fixed and has a regression test. What remains is one finding on a FastAPI route that has no sign-in check but is only mounted in local development, and one on Juice Shop decoding a token to show the login time; both match what the code does. It did not find Juice Shop's deliberate basket IDOR, because those handlers are registered from another file. A code review before merging found ten more problems (findings it should have raised but didn't, Python findings pointing at the wrong line, and a passed line shown for apps where nothing was checked); each is fixed and has a test.
 - Every bug fix gets a regression test, so the same mistake doesn't come back.
 - What hasn't happened yet is wide real-world use. Most false alarms are found when the tool meets code written differently from what it has seen, so your reports make the biggest difference.
 

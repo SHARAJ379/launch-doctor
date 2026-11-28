@@ -1,4 +1,5 @@
 import { applyBaseline, fingerprint, loadBaseline } from './baseline.js';
+import { accessCheck } from './checks/access.js';
 import { costsCheck } from './checks/costs.js';
 import { databaseCheck } from './checks/database.js';
 import { emailCheck } from './checks/email.js';
@@ -21,6 +22,7 @@ function notRun(note: string): CheckOutput {
 export const CHECKS: Check[] = [
   secretsCheck,
   databaseCheck,
+  accessCheck,
   paymentsCheck,
   costsCheck,
   emailCheck,

@@ -103,6 +103,8 @@ export function createDemoProject(): string {
       "import OpenAI from 'openai';\n\nconst openai = new OpenAI({ apiKey: import.meta.env.VITE_OPENAI_API_KEY, dangerouslyAllowBrowser: true });\n\nexport async function summarize(text: string) {\n  return openai.chat.completions.create({ model: 'gpt-5-mini', messages: [{ role: 'user', content: text }] });\n}\n",
     'src/pages/Signup.tsx':
       "import { supabase } from '../lib/supabase';\n\nexport function Signup() {\n  return <button onClick={() => supabase.auth.signUp({ email: '', password: '' })}>Create account</button>;\n}\n",
+    'src/pages/Admin.tsx':
+      "export function Admin({ user }: { user: { email: string } }) {\n  if (user.email !== 'founder@example.com') return <p>Not allowed</p>;\n  return <AllUsersTable />;\n}\n",
     'src/api.ts': "export const getNotes = () => fetch('http://localhost:3001/notes').then((r) => r.json());\n",
     'supabase/functions/stripe-webhook/index.ts':
       "Deno.serve(async (req) => {\n  const event = await req.json();\n  if (event.type === 'checkout.session.completed') {\n    // mark the user as paid\n  }\n  return new Response('ok');\n});\n",
