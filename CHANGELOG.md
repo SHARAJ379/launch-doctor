@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New category: **Access control** (`access`, weight 3). It looks for the authorization mistakes that come up most in AI-built apps:
+  - `server-action-no-auth`: Next.js Server Actions that change data without checking who is calling (every exported action is a public POST endpoint). Actions in one file are grouped into one finding. When a blocking middleware covers every page, it becomes a checklist item instead.
+  - `api-write-no-auth`: Next.js route handlers, Express routes, tRPC procedures and FastAPI, Flask and Django views that change data without a sign-in check, in apps that have accounts. Webhooks with a signature check and sign-in, sign-up and contact flows are skipped.
+  - `missing-ownership-check`: signed-in handlers that load or change a record by an id from the request, with no owner filter, owner comparison, permission helper or admin check (IDOR). It covers Prisma, Drizzle, Mongoose, Sequelize, Supabase with the service-role key, Firebase Admin, SQLAlchemy and Django. An owner filter taken from the request body does not count.
+  - `user-metadata-role` (critical on the server, warning in the browser): roles or plans read from Supabase `user_metadata` or Clerk `unsafeMetadata`, which users can edit themselves, in code, RLS policies and SQL functions.
+  - `mass-assignment`: whole request bodies, form data or Server Action arguments saved to the database, and DRF serializers or Django forms with `fields = "__all__"`.
+  - `client-only-admin-check`: admin checks (a role or an admin email) that only exist in browser code, with nothing matching on the server or in database rules.
+  - `jwt-not-verified` and `jwt-none-algorithm` (critical): tokens decoded without checking the signature, or the `none` algorithm allowed.
+  - `supabase-getsession-server`: `supabase.auth.getSession()` trusted in server code without `getClaims()` or `getUser()`.
+  - Checklist: try to open another user's data with a second test account.
+- The demo app has an admin page that is only protected in the browser.
+
 ## [0.3.0] - 2026-11-27
 
 ### Added

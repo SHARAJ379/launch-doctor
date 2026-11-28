@@ -78,14 +78,14 @@ function rateLimitLibrary(ctx: ProjectContext): string {
 }
 
 /** Code in a middleware file that actually turns away signed-out requests. */
-const MIDDLEWARE_BLOCKS =
+export const MIDDLEWARE_BLOCKS =
   /\.protect\s*\(|status\s*:\s*401|NextResponse\.redirect\s*\(|\bredirect\s*\([^)]*["'`][^"'`]*\/(?:login|sign-?in)\b/i;
 
 /**
  * The strings in `matcher: "..."` or `matcher: ["...", "..."]`, or null if there is no matcher.
  * Read string by string, because matcher patterns often contain "]" themselves.
  */
-function matcherEntries(content: string): string[] | null {
+export function matcherEntries(content: string): string[] | null {
   const start = /matcher\s*:\s*/.exec(content);
   if (!start) return null;
   let i = start.index + start[0].length;
