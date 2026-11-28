@@ -54,6 +54,9 @@
     "cli"
   ],
   "author": "Sharaj R Shetty",
+  "contributors": [
+    "Namay Singh (https://github.com/namaysingh3925)"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "2.6.9",
