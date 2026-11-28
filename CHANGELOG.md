@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Checklist: try to open another user's data with a second test account.
 - The demo app has an admin page that is only protected in the browser.
 
+### Changed
+
+- SECURITY.md lists every network request Launch Doctor is expected to make: email DNS lookups, the `scan <url>` requests (including Supabase), the GitHub API calls for pull request comments, and the MCP server's tools.
+- LICENSE, README and package.json credit Namay Singh for early development.
+
 ## [0.3.0] - 2026-11-27
 
 ### Added
