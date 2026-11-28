@@ -27,8 +27,14 @@ Launch Doctor reads projects that may not be yours or may not be trustworthy, so
 
 - **Code execution while scanning.** Anything that makes Launch Doctor, or a tool it starts (such as `git`), run a program or code from the scanned folder. For example: a `.git/config` hook, a crafted file name, or a file that gets evaluated.
 - **Leaking secrets.** A full API key, password or token printed to the terminal, `LAUNCH_FIXES.md`, `--json`, `--sarif`, the GitHub job summary or the baseline file. Keys must always be masked.
-- **Unexpected network access.** Any request other than the documented email DNS lookups, or any of your code or findings being sent anywhere.
-- **Writing outside the expected places.** Files written anywhere other than `LAUNCH_FIXES.md`, the `--out` / `--sarif` targets, `.launchdoctor-baseline.json`, the files created by `init`, or the `GITHUB_STEP_SUMMARY` file. This includes path traversal through crafted file names.
+- **Unexpected network access.** Any request other than the ones listed below, or any of your code being sent anywhere. The expected network access is:
+  - **Folder scan:** DNS lookups (NS and TXT records) for the email sending domain. `--offline` turns them off.
+  - **`scan <url>`:** `GET` requests to the address you give, to the JavaScript files and source maps that page loads (which may be on another domain, such as a CDN), and to the Supabase project the page uses, with the public anon key found in the page. `--no-db` skips the Supabase requests.
+  - **`--pr-comment` (and the GitHub Action):** calls to the GitHub API with the workflow's token, to read the pull request's changed files and post finding titles, explanations, fix prompts and file paths as comments.
+  - **MCP server:** the same requests as the CLI, made by its `scan_project` and `scan_url` tools.
+
+  `--demo` makes no network requests.
+- **Writing outside the expected places.** Files written anywhere other than `LAUNCH_FIXES.md`, the `--out` / `--sarif` targets, `.launchdoctor-baseline.json`, the files created by `init`, or the `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT` files. This includes path traversal through crafted file names.
 - **Denial of service.** A small, crafted project that makes a scan hang or use huge amounts of memory.
 
 These are **not** security bugs (please open a normal issue instead):

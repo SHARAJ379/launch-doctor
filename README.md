@@ -494,6 +494,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for local environment setup, architecture
 Thanks to everyone who has helped build Launch Doctor. Contributors are listed here once their pull request is merged.
 
 - [@SHARAJ379](https://github.com/SHARAJ379): creator and maintainer
+- [@namaysingh3925](https://github.com/namaysingh3925): early development (many early commits were made from his machine)
 
 Want to be on this list? Reporting a false alarm with a small example is a great first contribution, and issues labelled `good first issue` or `help wanted` are a good place to start once there are some.
 
