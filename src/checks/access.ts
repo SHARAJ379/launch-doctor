@@ -1,7 +1,7 @@
-import { findUnits, type Unit } from '../access.js';
+import { bodyAfterParams, findUnits, type Unit } from '../access.js';
 import { AUTH_CHECK_RE, detectAuth } from '../detect.js';
 import type { ProjectContext, SourceFile } from '../project.js';
-import { matchBracket, matcherCovers } from '../routes.js';
+import { matchBracket, matcherCovers, matcherToRegExp } from '../routes.js';
 import type { Check, CheckOutput, Location } from '../types.js';
 import { lineTextAt } from '../util.js';
 import { appCode, clientCode, emptyOutput, isRouteLike, notApplicable, serverCode, where } from './common.js';
@@ -27,17 +27,41 @@ const PY_AUTH =
   /(?:Depends|Security)\(\s*[\w.]*(?:user|auth|current|session|token|login|verify|jwt|principal|account|member|admin|claims)\w*|\bcurrent_user\b|\bget_jwt_identity\s*\(|\bverify_jwt_in_request\s*\(|\brequest\.user\b|\bg\.user\b|\bsession\[\s*["']user/i;
 
 /** Function names defined in `shared` that this unit calls and that check who is signed in. */
-function callsAuthHelper(u: Unit): boolean {
+/** The source of one helper defined at `at` in `code`, cut at its real end (not running into the next function). */
+function helperBody(code: string, at: number, python: boolean): string {
+  if (python) {
+    const indent = /^[ \t]*/.exec(code.slice(code.lastIndexOf('\n', at) + 1))![0].length;
+    const lines = code.slice(at).split('\n');
+    let end = lines[0]!.length;
+    for (const line of lines.slice(1)) {
+      if (line.trim() && /^[ \t]*/.exec(line)![0].length <= indent) break;
+      end += line.length + 1;
+    }
+    return code.slice(at, at + end);
+  }
+  const paren = code.indexOf('(', at);
+  const body = paren === -1 ? null : bodyAfterParams(code, paren);
+  return body ? code.slice(at, body.end) : '';
+}
+
+/** The helpers defined next to this unit (same file) that it calls. */
+function calledHelpers(u: Unit): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
   for (const m of u.text.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
     const name = m[1]!;
+    if (seen.has(name)) continue;
+    seen.add(name);
     const def = new RegExp(`(?:function\\s+|(?:const|let|var)\\s+|def\\s+)${name.replace(/\$/g, '\\$')}\\b`).exec(
       u.shared,
     );
-    if (!def) continue;
-    const body = u.shared.slice(def.index, def.index + 1500);
-    if (AUTH_CHECK_RE.test(body) || AUTH_EXTRA.test(body) || PY_AUTH.test(body)) return true;
+    if (def) out.push(helperBody(u.shared, def.index, u.kind === 'python'));
   }
-  return false;
+  return out;
+}
+
+function callsAuthHelper(u: Unit): boolean {
+  return calledHelpers(u).some((body) => AUTH_CHECK_RE.test(body) || AUTH_EXTRA.test(body) || PY_AUTH.test(body));
 }
 
 function signsInCaller(u: Unit): boolean {
@@ -131,7 +155,11 @@ function scopedQuery(query: string, u: Unit): boolean {
     if (originOf(v ? v[1]! : m[0], u) !== 'request') return true;
   }
   if (u.kind === 'python') {
-    for (const m of query.matchAll(PY_OWNER_KW)) if (originOf(m[1]!, u) !== 'request') return true;
+    for (const m of query.matchAll(PY_OWNER_KW)) {
+      // "user=Depends(get_current_user)" is a parameter that receives the user, not a filter.
+      if (/^\s*(?:Depends|Security)\s*\(/.test(m[1]!)) continue;
+      if (originOf(m[1]!, u) !== 'request') return true;
+    }
   }
   return false;
 }
@@ -352,17 +380,32 @@ function writes(u: Unit, env: Env): boolean {
 // ---------- endpoints that are meant to be public ----------
 
 /** Sign-in flows, webhooks and public forms: they run before there is a user, or prove who is calling another way. */
-const PUBLIC_FLOW_NAME =
-  /log_?in|sign_?in|sign_?up|register|log_?out|sign_?out|reset|forgot|password|verify|confirm|callback|oauth|magic|otp|webhook|subscribe|newsletter|waitlist|contact|feedback|invite|accept|track|health|seed|cron/i;
+/**
+ * Function names of flows that run before there is a user (or that are public by nature). The whole name has to be
+ * that flow, optionally with a verb in front ("handleSignIn", "submitContactForm"): deleteContact or updatePassword
+ * change existing data and are not exempt.
+ */
+const PUBLIC_FLOW_NAME = new RegExp(
+  '^(?:handle|submit|send|process|on|do)?_?' +
+    '(?:(?:log_?in|sign_?in|sign_?up|register|log_?out|sign_?out|oauth|magic_?link|otp|webhook)\\w*' +
+    '|(?:forgot|reset|request)_?password(?:_?reset)?|request_?password_?reset|verify_?(?:email|otp|code|token)?|confirm_?email' +
+    '|(?:auth_?)?callback|(?:un)?subscribe|(?:join_?)?(?:waitlist|newsletter)|contact|feedback|health_?check|cron)' +
+    '(?:_?(?:form|action|handler|request|route))?$',
+  'i',
+);
+/** URL segments of webhooks, sign-in flows and cron jobs. */
 const PUBLIC_FLOW_PATH =
-  /(?:^|[/_.\-[])(?:webhooks?|hooks?|cron|callback|oauth|auth|login|logout|signin|sign-in|signup|sign-up|register|verify|reset|forgot|password|inngest|trigger|qstash|stripe|paddle|lemon-?squeezy|razorpay|clerk|svix|contact|newsletter|subscribe|waitlist|feedback|track|analytics|events?|health|seed|og)(?=$|[/_.\-\]])/i;
+  /(?:^|[/_.\-[])(?:webhooks?|hooks|cron|callback|oauth|auth|login|logout|signin|sign-in|signup|sign-up|register|inngest|qstash|health|contact|newsletter|subscribe|waitlist)(?=$|[/_.\-\]])/i;
 const SIGNED_REQUEST =
   /constructEvent|webhooks?\.(?:verify|unwrap|constructEvent)|verifySignature|verifyWebhook|validateWebhook|\bsvix\b|new\s+Webhook\s*\(|createHmac|timingSafeEqual|x-hub-signature|stripe-signature|CRON_SECRET|new\s+Receiver\s*\(|verify_webhook|compare_digest/i;
 
 function meantToBePublic(u: Unit): boolean {
   if (PUBLIC_FLOW_NAME.test(u.name) && u.kind !== 'route') return true;
-  if (PUBLIC_FLOW_PATH.test(u.urlPath ?? '') || PUBLIC_FLOW_PATH.test(u.file.path)) return true;
-  return SIGNED_REQUEST.test(u.text) || SIGNED_REQUEST.test(u.shared);
+  if (PUBLIC_FLOW_PATH.test(u.urlPath ?? '')) return true;
+  // A Next.js route file is one URL, so its path is the URL. Files holding many routes are judged route by route.
+  if (u.kind === 'route' && PUBLIC_FLOW_PATH.test(u.file.path)) return true;
+  // A signature check this handler actually runs (not one somewhere else in the file).
+  return [u.text, u.reachedCode, ...calledHelpers(u)].some((code) => SIGNED_REQUEST.test(code));
 }
 
 // ---------- middleware ----------
@@ -386,8 +429,13 @@ function middlewareCoversPages(ctx: ProjectContext): boolean {
     if (!isMiddlewareFile(f)) return false;
     const code = ctx.codeOf(f);
     if (!MIDDLEWARE_BLOCKS.test(code)) return false;
+    // Protection limited to some routes ("if (isProtectedRoute(req)) auth.protect()") doesn't cover every page.
+    if (/createRouteMatcher|isProtectedRoute/.test(code) && !/isPublicRoute/.test(code)) return false;
     const entries = matcherEntries(code);
-    return entries === null || entries.some((e) => /^\/(\(.*\)|:path\*|\.\*)/.test(e) || e === '/(.*)');
+    if (entries === null) return true;
+    // The matcher has to run on ordinary pages, not just /api or /dashboard.
+    const pages = ['/', '/settings', '/account/profile'];
+    return pages.every((p) => entries.some((e) => matcherToRegExp(e)?.test(p)));
   });
 }
 
@@ -522,7 +570,8 @@ export const accessCheck: Check = {
         });
       }
     }
-    if (actions.some((u) => writes(u, env)) && !openActions.length)
+    // Only when the app has accounts: without them nothing was checked, so there is nothing to claim.
+    if (hasAccounts && actions.some((u) => writes(u, env)) && !openActions.length)
       out.passed.push('Server Actions check who is calling');
 
     // 2. API routes that change data without asking who is calling.
@@ -550,7 +599,8 @@ export const accessCheck: Check = {
           'If this endpoint is meant to be public (a webhook, a contact form), tell me how it is protected instead (a signature check, a rate limit) and leave it.',
       });
     }
-    if (writeUnits.length && !openRoutes.length) out.passed.push('Endpoints that change data check who is calling');
+    if (hasAccounts && writeUnits.length && !openRoutes.length)
+      out.passed.push('Endpoints that change data check who is calling');
 
     // 3. Records looked up by an id from the request, with nothing tying them to the caller.
     let lookupsSeen = 0;

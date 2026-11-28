@@ -227,12 +227,27 @@ const EXPRESS_ROUTE = /\b(?:app|router|routes|\w+Router)\.(get|post|put|patch|de
 /** Route middleware that signs the caller in (passed before the handler, or with app.use). */
 const EXPRESS_AUTH_MW =
   /\b(?:\w*[aA]uth\w*|protect\w*|requireUser|requireLogin|ensureLoggedIn|isLoggedIn|loggedIn|verifyToken|verifyJwt|checkJwt|jwtCheck|requireSession|passport\.authenticate|clerkMiddleware|requireAdmin|isAdmin)\b/;
-const EXPRESS_USE_AUTH =
-  /\.use\(\s*(?:["'`][^"'`]*["'`]\s*,\s*)?[\w.]*(?:[aA]uth|protect|requireUser|requireLogin|ensureLoggedIn|verifyToken|verifyJwt|checkJwt|jwt|clerkMiddleware)\w*/;
+/** `app.use([path,] middleware)`: the optional mount path and the first middleware passed. */
+const EXPRESS_USE = /\.use\(\s*(?:(["'`])([^"'`]*)\1\s*,\s*)?([\w$.]+)/g;
+const AUTH_MIDDLEWARE_NAME =
+  /(?:[aA]uth|protect|requireUser|requireLogin|ensureLoggedIn|verifyToken|verifyJwt|checkJwt|jwt|clerkMiddleware)/;
+/** A router mounted with app.use("/api/auth", authRoutes) serves the sign-in pages; it doesn't guard other routes. */
+const ROUTER_NAME = /(?:Routes?|Router|routes?|router|Controller|controller)$/;
+
+/** Mount paths of app.use(...) sign-in middleware in this file ("" = every route). */
+function authMounts(code: string): string[] {
+  const out: string[] = [];
+  for (const m of code.matchAll(EXPRESS_USE)) {
+    const fn = m[3]!.split('.').pop()!;
+    if (AUTH_MIDDLEWARE_NAME.test(fn) && !ROUTER_NAME.test(fn)) out.push(m[2] ?? '');
+  }
+  return out;
+}
 
 function expressRoutes(ctx: ProjectContext, file: SourceFile, code: string): Unit[] {
   const out: Unit[] = [];
-  const fileAuth = EXPRESS_USE_AUTH.test(code);
+  const mounts = authMounts(code);
+  const mountedAuth = (path: string) => mounts.some((p) => p === '' || p === '/' || path.startsWith(p));
   EXPRESS_ROUTE.lastIndex = 0;
   for (let m = EXPRESS_ROUTE.exec(code); m; m = EXPRESS_ROUTE.exec(code)) {
     const open = code.indexOf('(', m.index);
@@ -258,7 +273,7 @@ function expressRoutes(ctx: ProjectContext, file: SourceFile, code: string): Uni
       start: open,
       line: ctx.lineOf(file, m.index),
       paramsFromCaller: false,
-      authOutside: fileAuth || EXPRESS_AUTH_MW.test(middleware),
+      authOutside: mountedAuth(m[3]!) || EXPRESS_AUTH_MW.test(middleware),
       adminOnly: /\b\w*[aA]dmin\w*\b/.test(middleware),
       reachedCode: reached.files.map((f) => ctx.codeOf(f)).join('\n'),
       shared: '',
@@ -273,8 +288,11 @@ const TRPC_CALL = /\.(query|mutation)\s*\(/g;
 function trpcProcedures(ctx: ProjectContext, file: SourceFile, code: string): Unit[] {
   if (!TRPC_FILE.test(code)) return [];
   const out: Unit[] = [];
+  let insideUntil = -1;
   TRPC_CALL.lastIndex = 0;
   for (let m = TRPC_CALL.exec(code); m; m = TRPC_CALL.exec(code)) {
+    // A `.query(` inside a procedure body (pool.query, db.query) is SQL, not another procedure.
+    if (m.index < insideUntil) continue;
     const back = code.slice(Math.max(0, m.index - 800), m.index);
     // "name: protectedProcedure.input(...)" with no statement break before ".query(" / ".mutation(".
     const procs = [...back.matchAll(/(?:(\w+)\s*[:=]\s*)?\b(\w*[pP]rocedure)\b/g)];
@@ -284,6 +302,7 @@ function trpcProcedures(ctx: ProjectContext, file: SourceFile, code: string): Un
     const close = matchBracket(code, open);
     if (close === -1) continue;
     const text = code.slice(open, close + 1);
+    insideUntil = close;
     const procName = proc[2]!;
     const reached = reach(ctx, file, text);
     out.push({
@@ -298,7 +317,7 @@ function trpcProcedures(ctx: ProjectContext, file: SourceFile, code: string): Un
       line: ctx.lineOf(file, m.index),
       paramsFromCaller: true,
       authOutside:
-        !/^public/i.test(procName) &&
+        !/^(?:public|un|anon|guest|open)/i.test(procName) &&
         /protected|authed|auth|private|user|admin|member|org|team|signedIn/i.test(procName),
       adminOnly: /admin|superuser|staff/i.test(procName),
       reachedCode: reached.files.map((f) => ctx.codeOf(f)).join('\n'),
@@ -324,6 +343,8 @@ interface PyDef {
   name: string;
   indent: number;
   start: number;
+  /** Where the first decorator starts (or `start` when there is none). */
+  textStart: number;
   paren: number;
   decorators: string[];
 }
@@ -331,11 +352,13 @@ interface PyDef {
 function pythonDefs(code: string): PyDef[] {
   const out: PyDef[] = [];
   let pending: string[] = [];
+  let pendingStart = -1;
   let lastEnd = 0;
   const re = /^([ \t]*)(?:(@[\w.]+)|(?:async[ \t]+)?def[ \t]+(\w+)[ \t]*\()/gm;
   for (let m = re.exec(code); m; m = re.exec(code)) {
     if (code.slice(lastEnd, m.index).trim()) pending = [];
     if (m[2]) {
+      if (!pending.length) pendingStart = m.index + m[1]!.length;
       // A decorator; its arguments may span several lines.
       const after = m.index + m[0].length;
       const paren = /^\s*\(/.exec(code.slice(after, after + 20));
@@ -354,6 +377,7 @@ function pythonDefs(code: string): PyDef[] {
       name: m[3]!,
       indent: m[1]!.replace(/\t/g, '    ').length,
       start: m.index + m[1]!.length,
+      textStart: pending.length ? pendingStart : m.index + m[1]!.length,
       paren: m.index + m[0].length - 1,
       decorators: pending,
     });
@@ -424,8 +448,9 @@ function pythonViews(ctx: ProjectContext, file: SourceFile, code: string, projec
       method,
       urlPath: pathArg?.[1] ?? null,
       params,
-      text: `${decorators.join('\n')}\n${code.slice(def.start, end)}`,
-      start: def.start,
+      // The text starts at the first decorator, so start + index is always a real position in the file.
+      text: code.slice(def.textStart, end),
+      start: def.textStart,
       line: ctx.lineOf(file, def.start),
       paramsFromCaller: true,
       authOutside: fileAuth || decorators.some((d) => PY_AUTH_DECORATOR.test(d)) || PY_AUTH_PARAM.test(params),

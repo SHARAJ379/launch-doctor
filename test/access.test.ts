@@ -820,3 +820,162 @@ export async function saveProfile(profile: ProfileInput) {
     ['accounts/forms.py', 'app/actions.ts'],
   );
 });
+
+// ---------- regressions from code review of PR #5 ----------
+
+test('review: app.use("/api/auth", authRoutes) mounts a router, it does not protect other routes', async () => {
+  const c = await access({
+    'package.json': JSON.stringify({
+      dependencies: { express: '^5.0.0', '@prisma/client': '^7.0.0', passport: '^0.7.0' },
+    }),
+    'server/index.ts': `app.use('/api/auth', authRoutes);
+app.use('/api/admin', requireAuth);
+app.delete('/api/notes/:id', async (req, res) => {
+  await prisma.note.delete({ where: { id: req.params.id } });
+  res.sendStatus(204);
+});
+app.delete('/api/admin/users/:id', async (req, res) => {
+  await prisma.audit.create({ data: { at: new Date() } });
+  res.sendStatus(204);
+});
+`,
+  });
+  assert.deepEqual(
+    c.findings.map((x) => [x.id, x.title.includes('/api/notes/:id')]),
+    [['api-write-no-auth', true]],
+  );
+  assert.ok(!c.passed.includes('Endpoints that change data check who is calling'));
+});
+
+test('review: Python findings point at the right line under a multi-line decorator', async () => {
+  const c = await access({
+    'requirements.txt': 'fastapi\n',
+    'app/main.py': `from fastapi import APIRouter, Depends
+router = APIRouter()
+
+
+@router.delete(
+    "/items/{item_id}",
+    status_code=204,
+)
+def delete_item(item_id: int, user=Depends(get_current_user), db=Depends(get_db)):
+    """Delete an item."""
+    # look it up
+    item = db.get(Item, item_id)
+    db.delete(item)
+    db.commit()
+
+
+def helper():
+    return 1
+`,
+  });
+  const f = c.findings.find((x) => x.id === 'missing-ownership-check');
+  assert.equal(f?.location?.line, 12);
+});
+
+test('review: no "check who is calling" pass is claimed for an app without accounts', async () => {
+  const c = await access({
+    'package.json': JSON.stringify({ dependencies: { next: '^16.0.0', '@prisma/client': '^7.0.0' } }),
+    'app/actions.ts': `'use server';\nexport async function deleteNote(id: string) { await prisma.note.delete({ where: { id } }); }\n`,
+    'app/api/notes/route.ts': `export async function POST(req: Request) { await prisma.note.create({ data: { text: 'x' } }); }\n`,
+  });
+  assert.ok(!c.passed.includes('Server Actions check who is calling'));
+  assert.ok(!c.passed.includes('Endpoints that change data check who is calling'));
+});
+
+test('review: deleteContact and updatePassword are not exempt as "public flows"; signUpWithEmail and submitContactForm are', async () => {
+  const c = await access({
+    'package.json': nextPkg(),
+    'app/actions.ts': `'use server';
+export async function deleteContact(id: string) { await prisma.contact.delete({ where: { id } }); }
+export async function updatePassword(userId: string, hash: string) { await prisma.user.update({ where: { id: userId }, data: { hash } }); }
+export async function signUpWithEmail(email: string) { await prisma.user.create({ data: { email } }); }
+export async function submitContactForm(text: string) { await prisma.message.create({ data: { text } }); }
+`,
+  });
+  const f = c.findings.find((x) => x.id === 'server-action-no-auth');
+  assert.match(f!.title, /2 Server Actions .*deleteContact, updatePassword/);
+});
+
+test('review: a signature helper elsewhere in the file does not exempt every route', async () => {
+  const c = await access({
+    'package.json': JSON.stringify({
+      dependencies: { express: '^5.0.0', '@prisma/client': '^7.0.0', passport: '^0.7.0' },
+    }),
+    'server/index.ts': `function checkSig(req) { return crypto.timingSafeEqual(a, b); }
+app.post('/hooks/billing', async (req, res) => {
+  if (!checkSig(req)) return res.sendStatus(400);
+  await prisma.invoice.create({ data: { paid: true } });
+});
+app.delete('/api/notes/:id', async (req, res) => {
+  await prisma.note.delete({ where: { id: req.params.id } });
+});
+`,
+  });
+  assert.deepEqual(
+    c.findings.filter((x) => x.id === 'api-write-no-auth').map((x) => x.title.includes('/api/notes/:id')),
+    [true],
+  );
+});
+
+test('review: /api/events and Express files named events.ts are not treated as public', async () => {
+  const c = await access({
+    'package.json': nextPkg({ express: '^5.0.0' }),
+    'app/api/events/[id]/route.ts': `export async function DELETE(req: Request, { params }: { params: { id: string } }) {\n  await prisma.event.delete({ where: { id: params.id } });\n}\n`,
+    'server/routes/events.ts': `router.post('/rsvp', async (req, res) => {\n  await prisma.rsvp.create({ data: { eventId: req.body.eventId } });\n});\n`,
+  });
+  assert.equal(c.findings.filter((x) => x.id === 'api-write-no-auth').length, 2);
+});
+
+test('review: middleware that only protects /dashboard and /api does not cover Server Actions on other pages', async () => {
+  const c = await access({
+    'package.json': nextPkg({ '@clerk/nextjs': '^7.0.0' }),
+    'middleware.ts': `const isProtectedRoute = createRouteMatcher(['/dashboard(.*)']);
+export default clerkMiddleware(async (auth, req) => { if (isProtectedRoute(req)) await auth.protect(); });
+export const config = { matcher: ['/dashboard(.*)', '/(api|trpc)(.*)'] };
+`,
+    'app/settings/actions.ts': `'use server';\nexport async function deleteNote(id: string) { await prisma.note.delete({ where: { id } }); }\n`,
+  });
+  assert.deepEqual(findingIds(c), ['server-action-no-auth']);
+});
+
+test('review: a helper followed by an auth helper in the file is not mistaken for a sign-in check', async () => {
+  const c = await access({
+    'package.json': nextPkg(),
+    'app/actions.ts': `'use server';
+function slugify(s: string) {
+  return s.toLowerCase();
+}
+async function requireUser() {
+  const s = await auth();
+  if (!s) throw new Error('no');
+  return s.user;
+}
+export async function renameNote(id: string, title: string) {
+  await prisma.note.update({ where: { id }, data: { slug: slugify(title) } });
+}
+`,
+  });
+  assert.deepEqual(findingIds(c), ['server-action-no-auth']);
+});
+
+test('review: unauthedProcedure is not signed in, and pool.query inside a procedure is not a procedure', async () => {
+  const c = await access({
+    'package.json': JSON.stringify({
+      dependencies: { '@trpc/server': '^11.0.0', '@prisma/client': '^7.0.0', 'next-auth': '^5.0.0' },
+    }),
+    'server/router.ts': `export const appRouter = createTRPCRouter({
+  remove: unauthedProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => db.note.delete({ where: { id: input.id } })),
+  create: protectedProcedure.input(s).mutation(async ({ input }) => {
+    const r = await pool.query('select 1 where id = $1', [input.id]);
+    return r;
+  }),
+});
+`,
+  });
+  assert.deepEqual(
+    c.findings.map((x) => [x.id, x.title.includes('remove')]),
+    [['api-write-no-auth', true]],
+  );
+});
